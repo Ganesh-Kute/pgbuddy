@@ -25,11 +25,22 @@ import threading
 import json
 import re
 
-# ── CONFIG (edit these) ──────────────────────────────────────────────────────
-SUPABASE_URL = "https://vcpohetbsyyjqqkzuzxj.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjcG9oZXRic3l5anFxa3p1enhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzcxNzk0NSwiZXhwIjoyMDg5MjkzOTQ1fQ.p96BgDmdWhjuP4U_6KFPwYjnUBgAiOe88nKtia3hIoA"
-SERVER_SECRET = "pg_buddy_whatsapp_secret_2024"
-PORT = 3001
+# ── CONFIG (read from environment — never hardcode secrets) ───────────────────
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+SERVER_SECRET = os.environ.get("SERVER_SECRET", "").strip()
+PORT = int(os.environ.get("PORT", "3001"))
+
+_missing_env = [
+    k for k, v in (
+        ("SUPABASE_URL", SUPABASE_URL),
+        ("SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY),
+        ("SERVER_SECRET", SERVER_SECRET),
+    )
+    if not v
+]
+if _missing_env:
+    raise SystemExit("Missing required environment variables: " + ", ".join(_missing_env))
 
 # ── STEP 1: Install Node.js 18 ──────────────────────────────────────────────
 print("=" * 60)
@@ -116,13 +127,18 @@ with open(f"{SERVER_DIR}/package.json", "w") as f:
 
 # server.js (Kaggle-optimized version)
 SERVER_CODE = r'''
+const crypto = require("crypto");
 const express = require("express");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const { createClient } = require("@supabase/supabase-js");
 
 const PORT = process.env.PORT || 3001;
-const SERVER_SECRET = process.env.SERVER_SECRET || "pg_buddy_whatsapp_secret_2024";
+const SERVER_SECRET = process.env.SERVER_SECRET;
+if (!SERVER_SECRET || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error("Missing required env vars: SERVER_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY");
+  process.exit(1);
+}
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -192,10 +208,12 @@ function setRateLimit(phone) {
   otpRateLimiter.set(phone, Date.now());
 }
 
-// Auth middleware
+// Auth middleware (constant-time comparison)
 function authenticate(req, res, next) {
-  const secret = req.headers["x-server-secret"] || req.body?.secret;
-  if (secret !== SERVER_SECRET) {
+  const secret = String(req.headers["x-server-secret"] || req.body?.secret || "");
+  const a = Buffer.from(secret);
+  const b = Buffer.from(SERVER_SECRET);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   next();
@@ -358,9 +376,9 @@ tunnel_proc = subprocess.Popen(
 SUPABASE_PROJECT_REF = "vcpohetbsyyjqqkzuzxj"
 
 def print_supabase_update_command(tunnel_url_val):
-    """Print the command to update Supabase secrets."""
+    """Print the command to update Supabase secrets without echoing secret values."""
     print(f"\n📋 Run this on your laptop (from PG_buddy folder):")
-    print(f'\n   npx supabase secrets set WA_SERVER_URL="{tunnel_url_val}" WA_SERVER_SECRET="{SERVER_SECRET}"')
+    print(f'\n   npx supabase secrets set WA_SERVER_URL="{tunnel_url_val}" WA_SERVER_SECRET="<your SERVER_SECRET>"')
     print(f"\n   OR set it in Supabase Dashboard -> Edge Functions -> Secrets")
 
 # Background thread to capture tunnel URL
