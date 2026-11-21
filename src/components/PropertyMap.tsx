@@ -7,7 +7,7 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
-delete (L.Icon.Default.prototype as any)._getIconUrl;
+delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
   iconUrl: markerIcon,
@@ -92,7 +92,7 @@ const PropertyMap = ({ properties }: { properties: MapProperty[] }) => {
       (bounds as [number, number][]).push([lat, lng]);
     });
 
-    if ((bounds as any[]).length > 0) {
+    if ((bounds as [number, number][]).length > 0) {
       map.fitBounds(bounds as L.LatLngBoundsExpression, { padding: [50, 50], maxZoom: 12 });
     }
   }, [properties]);

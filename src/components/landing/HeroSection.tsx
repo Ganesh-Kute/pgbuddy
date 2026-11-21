@@ -1,36 +1,43 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowRight, Search, Building2, Users, Shield, Sparkles, LogIn, Download, Smartphone } from "lucide-react";
+import { ArrowRight, Users, Shield, Sparkles, LogIn, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Capacitor } from "@capacitor/core";
 
 const HeroSection = () => {
   const { user, loading } = useAuth();
+  const prefersReduced = useReducedMotion();
+
+  const fadeUp = (delay = 0) =>
+    prefersReduced
+      ? { initial: false, animate: { opacity: 1 } }
+      : { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, delay } };
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-[calc(4.5rem+env(safe-area-inset-top,0px))] pb-12">
       {/* Animated gradient background */}
       <div className="absolute inset-0 animated-gradient" />
-      
+
       {/* Mesh gradient orbs */}
       <div className="absolute top-20 left-10 w-80 h-80 bg-primary/8 rounded-full blur-[100px] animate-pulse" />
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-secondary/8 rounded-full blur-[120px]" />
       <div className="absolute top-1/3 right-1/3 w-72 h-72 bg-accent/5 rounded-full blur-[80px]" />
 
       {/* Dot grid pattern */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: "radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)",
-        backgroundSize: "32px 32px"
-      }} />
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage: "radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
+      />
 
       <div className="container mx-auto px-4 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
           {/* Badge */}
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.5 }}
+            {...fadeUp(0)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card border border-primary/15 mb-8 shadow-sm"
           >
             <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -41,9 +48,7 @@ const HeroSection = () => {
 
           {/* Main Heading */}
           <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
+            {...fadeUp(0.1)}
             className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold leading-[1.1] tracking-tight mb-6"
           >
             Manage Your{" "}
@@ -54,28 +59,24 @@ const HeroSection = () => {
 
           {/* Subtitle */}
           <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+            {...fadeUp(0.2)}
             className="text-base sm:text-lg text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed"
           >
-            The complete solution for PG owners and tenants. Manage properties, 
+            The complete solution for PG owners and tenants. Manage properties,
             collect rent, track expenses, and find your perfect PG – all in one place.
           </motion.p>
 
           {/* CTA Buttons */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-14"
+            {...fadeUp(0.3)}
+            className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-12 sm:mb-14"
           >
-            {!loading && (
-              user ? (
+            {!loading &&
+              (user ? (
                 <>
                   <Button
                     size="lg"
-                    className="gradient-primary text-base px-8 py-6 shadow-lg hover:shadow-glow transition-all duration-300 group rounded-xl"
+                    className="w-full sm:w-auto min-h-[48px] gradient-primary text-base px-8 py-6 shadow-lg hover:shadow-glow transition-all duration-300 group rounded-xl"
                     asChild
                   >
                     <Link to="/dashboard">
@@ -88,7 +89,7 @@ const HeroSection = () => {
                     <Button
                       size="lg"
                       variant="outline"
-                      className="text-base px-8 py-6 border-2 hover:bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400 rounded-xl group"
+                      className="w-full sm:w-auto min-h-[48px] text-base px-8 py-6 border-2 hover:bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400 rounded-xl group"
                       asChild
                     >
                       <a href="/pg-buddy.apk" download>
@@ -102,7 +103,7 @@ const HeroSection = () => {
                 <>
                   <Button
                     size="lg"
-                    className="gradient-primary text-base px-8 py-6 shadow-lg hover:shadow-glow transition-all duration-300 group rounded-xl"
+                    className="w-full sm:w-auto min-h-[48px] gradient-primary text-base px-8 py-6 shadow-lg hover:shadow-glow transition-all duration-300 group rounded-xl"
                     asChild
                   >
                     <Link to="/auth?mode=signup">
@@ -114,7 +115,7 @@ const HeroSection = () => {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="text-base px-8 py-6 border-2 hover:bg-primary/5 rounded-xl"
+                    className="w-full sm:w-auto min-h-[48px] text-base px-8 py-6 border-2 hover:bg-primary/5 rounded-xl"
                     asChild
                   >
                     <Link to="/auth">
@@ -126,7 +127,7 @@ const HeroSection = () => {
                     <Button
                       size="lg"
                       variant="outline"
-                      className="text-base px-8 py-6 border-2 hover:bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400 rounded-xl group"
+                      className="w-full sm:w-auto min-h-[48px] text-base px-8 py-6 border-2 hover:bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400 rounded-xl group"
                       asChild
                     >
                       <a href="/pg-buddy.apk" download>
@@ -136,23 +137,20 @@ const HeroSection = () => {
                     </Button>
                   )}
                 </>
-              )
-            )}
+              ))}
           </motion.div>
 
           {/* Stats */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className="inline-flex items-center gap-8 sm:gap-12 px-8 py-5 rounded-2xl glass-card border border-border/50 shadow-card"
+            {...fadeUp(0.4)}
+            className="inline-flex flex-wrap sm:flex-nowrap items-center justify-center gap-6 sm:gap-12 px-6 sm:px-8 py-4 sm:py-5 rounded-2xl glass-card border border-border/50 shadow-card max-w-full"
           >
             {[
               { value: "10K+", label: "PG Properties" },
               { value: "50K+", label: "Happy Tenants" },
               { value: "₹5Cr+", label: "Rent Collected" },
             ].map((stat, index) => (
-              <div key={index} className="text-center">
+              <div key={index} className="text-center min-w-[76px]">
                 <div className="text-2xl sm:text-3xl font-extrabold gradient-text">
                   {stat.value}
                 </div>
@@ -164,13 +162,13 @@ const HeroSection = () => {
 
         {/* Floating Cards */}
         <motion.div
-          initial={{ opacity: 0 }}
+          initial={prefersReduced ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 0.6 }}
+          transition={prefersReduced ? { duration: 0 } : { duration: 1, delay: 0.6 }}
           className="hidden lg:block"
         >
           <motion.div
-            animate={{ y: [0, -12, 0] }}
+            animate={prefersReduced ? undefined : { y: [0, -12, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
             className="absolute left-8 top-1/2 -translate-y-1/2"
           >
@@ -191,7 +189,7 @@ const HeroSection = () => {
           </motion.div>
 
           <motion.div
-            animate={{ y: [0, 12, 0] }}
+            animate={prefersReduced ? undefined : { y: [0, 12, 0] }}
             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
             className="absolute right-8 top-1/3"
           >
@@ -210,21 +208,23 @@ const HeroSection = () => {
         </motion.div>
       </div>
 
-      {/* Scroll indicator */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.2 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2"
-      >
+      {/* Scroll indicator (desktop only so it never overlaps stats card on mobile) */}
+      {!prefersReduced && (
         <motion.div
-          animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-          className="w-6 h-10 rounded-full border-2 border-muted-foreground/20 flex justify-center pt-2"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2 }}
+          className="hidden md:block absolute bottom-8 left-1/2 -translate-x-1/2"
         >
-          <div className="w-1 h-2 bg-muted-foreground/40 rounded-full" />
+          <motion.div
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+            className="w-6 h-10 rounded-full border-2 border-muted-foreground/20 flex justify-center pt-2"
+          >
+            <div className="w-1 h-2 bg-muted-foreground/40 rounded-full" />
+          </motion.div>
         </motion.div>
-      </motion.div>
+      )}
     </section>
   );
 };

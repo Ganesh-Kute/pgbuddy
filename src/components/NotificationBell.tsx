@@ -19,7 +19,7 @@ interface Notification {
   type: string;
   is_read: boolean;
   created_at: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 const NotificationBell = () => {

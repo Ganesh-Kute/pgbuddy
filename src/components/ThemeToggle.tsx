@@ -1,16 +1,25 @@
+import { useEffect } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 
 const ThemeToggle = ({ className }: { className?: string }) => {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, theme, setTheme } = useTheme();
+  const activeTheme = resolvedTheme || theme;
+
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute("content", activeTheme === "dark" ? "#0d0a16" : "#7c3aed");
+    }
+  }, [activeTheme]);
 
   return (
     <Button
       variant="ghost"
       size="icon"
       className={className}
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      onClick={() => setTheme(activeTheme === "dark" ? "light" : "dark")}
       aria-label="Toggle dark mode"
     >
       <Sun className="w-4 h-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />

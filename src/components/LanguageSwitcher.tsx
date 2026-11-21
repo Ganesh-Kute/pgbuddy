@@ -34,7 +34,7 @@ const LanguageSwitcher = ({ variant = "ghost" }: { variant?: "ghost" | "outline"
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant={variant} size="sm" className="gap-1.5">
+        <Button variant={variant} size="sm" className="gap-1.5 min-h-[44px] sm:min-h-0">
           <Globe className="w-4 h-4" />
           <span className="hidden sm:inline text-xs">{current?.label}</span>
         </Button>
