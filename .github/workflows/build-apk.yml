@@ -23,7 +23,22 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Check Supabase secrets are set
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          missing=0
+          [ -n "$VITE_SUPABASE_URL" ] || { echo "::error::Repository secret VITE_SUPABASE_URL is not set"; missing=1; }
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || { echo "::error::Repository secret VITE_SUPABASE_PUBLISHABLE_KEY is not set"; missing=1; }
+          exit $missing
+
       - name: Build web app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
+          VITE_IS_WHITE_LABEL: ${{ vars.VITE_IS_WHITE_LABEL }}
         run: npm run build
 
       - name: Setup Java JDK
