@@ -39,7 +39,7 @@ const MessAttendance = ({ standalone = true }: { standalone?: boolean }) => {
 
     // Get active members + their plans
     const { data: members } = await supabase
-      .from("mess_members" as any)
+      .from("mess_members")
       .select("id, full_name, plan_id")
       .eq("owner_id", effectiveOwnerId!)
       .eq("status", "active");
@@ -52,35 +52,35 @@ const MessAttendance = ({ standalone = true }: { standalone?: boolean }) => {
 
     // Get plans for meal info
     const { data: plans } = await supabase
-      .from("mess_plans" as any)
+      .from("mess_plans")
       .select("id, meals_included")
       .eq("owner_id", effectiveOwnerId!);
 
     const planMap: Record<string, string[]> = {};
-    (plans ?? []).forEach((p: any) => { planMap[p.id] = p.meals_included || []; });
+    (plans ?? []).forEach((p) => { planMap[p.id] = p.meals_included || []; });
 
-    const memberIds = (members as any[]).map(m => m.id);
+    const memberIds = members.map(m => m.id);
 
     // Get existing attendance for this date
     const { data: attendance } = await supabase
-      .from("mess_attendance" as any)
+      .from("mess_attendance")
       .select("*")
       .eq("attendance_date", date)
       .in("member_id", memberIds);
 
-    const attMap: Record<string, any> = {};
-    (attendance ?? []).forEach((a: any) => { attMap[a.member_id] = a; });
+    const attMap: Record<string, NonNullable<typeof attendance>[number]> = {};
+    (attendance ?? []).forEach((a) => { attMap[a.member_id] = a; });
 
     // Get off days
     const { data: offDays } = await supabase
-      .from("mess_off_days" as any)
+      .from("mess_off_days")
       .select("member_id")
       .eq("off_date", date)
       .in("member_id", memberIds);
 
-    const offSet = new Set((offDays ?? []).map((o: any) => o.member_id));
+    const offSet = new Set((offDays ?? []).map((o) => o.member_id));
 
-    setRows((members as any[]).map(m => ({
+    setRows(members.map(m => ({
       memberId: m.id,
       name: m.full_name,
       planMeals: m.plan_id ? (planMap[m.plan_id] || []) : [],
@@ -105,45 +105,56 @@ const MessAttendance = ({ standalone = true }: { standalone?: boolean }) => {
 
   const handleSave = async () => {
     setSaving(true);
-    for (const row of rows) {
-      if (row.isOffDay) continue;
-      await supabase.from("mess_attendance" as any).upsert({
-        member_id: row.memberId,
-        attendance_date: date,
-        breakfast: row.breakfast,
-        lunch: row.lunch,
-        dinner: row.dinner,
-        marked_by: effectiveOwnerId,
-      }, { onConflict: "member_id,attendance_date" });
-    }
+    // One request for the whole day, not one per member; and a failure is reported, not hidden.
+    const records = rows.filter((r) => !r.isOffDay).map((row) => ({
+      member_id: row.memberId,
+      attendance_date: date,
+      breakfast: row.breakfast,
+      lunch: row.lunch,
+      dinner: row.dinner,
+      marked_by: effectiveOwnerId,
+    }));
+    const { error } = records.length
+      ? await supabase.from("mess_attendance").upsert(records, { onConflict: "member_id,attendance_date" })
+      : { error: null };
     setSaving(false);
+    if (error) {
+      toast({ title: "Could not save attendance", description: error.message, variant: "destructive" });
+      return;
+    }
     toast({ title: "Attendance saved!" });
   };
 
   const handleDownloadMonthly = async () => {
-    const startOfMonth = new Date(date);
-    startOfMonth.setDate(1);
-    const endOfMonth = new Date(date);
-    endOfMonth.setMonth(endOfMonth.getMonth() + 1);
-    endOfMonth.setDate(0);
+    if (!effectiveOwnerId) return;
+    // From the yyyy-MM-dd parts: new Date("2026-03-31") + setMonth(+1) overflowed into May.
+    const [y, m] = date.split("-").map(Number);
+    const startOfMonth = new Date(y, m - 1, 1);
+    const endOfMonth = new Date(y, m, 0);
 
     const { data: attendance, error } = await supabase
-      .from("mess_attendance" as any)
-      .select("*, mess_members(full_name)")
-      .eq("owner_id", effectiveOwnerId!)
+      .from("mess_attendance")
+      // mess_attendance has no owner_id: scope through the member, which does.
+      .select("attendance_date, breakfast, lunch, dinner, mess_members!inner(full_name, owner_id)")
+      .eq("mess_members.owner_id", effectiveOwnerId)
       .gte("attendance_date", format(startOfMonth, "yyyy-MM-dd"))
       .lte("attendance_date", format(endOfMonth, "yyyy-MM-dd"))
       .order("attendance_date", { ascending: true });
 
-    if (error || !attendance || attendance.length === 0) {
+    if (error) {
+      toast({ title: "Could not load attendance", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (!attendance || attendance.length === 0) {
       toast({ title: "No data", description: "No records found for this month", variant: "destructive" });
       return;
     }
 
     const headers = ["Date", "Member", "Breakfast", "Lunch", "Dinner"];
-    const rows = attendance.map((a: any) => [
+    const rows = attendance.map((a) => [
       a.attendance_date,
-      a.mess_members?.full_name || "Unknown",
+      // quoted, so a name with a comma does not shift the columns
+      `"${(a.mess_members?.full_name || "Unknown").replace(/"/g, '""')}"`,
       a.breakfast ? "P" : "-",
       a.lunch ? "P" : "-",
       a.dinner ? "P" : "-"

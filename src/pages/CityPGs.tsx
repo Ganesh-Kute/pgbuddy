@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Navbar from "@/components/landing/Navbar";
 import Footer from "@/components/landing/Footer";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { motion } from "framer-motion";
 import SEOHead from "@/components/SEOHead";
 
@@ -25,6 +26,12 @@ const cityData: Record<string, { title: string; description: string }> = {
   nashik: { title: "Best PGs in Nashik", description: "Find comfortable PG accommodations in Nashik for students and professionals." },
 };
 
+const CITY_PG_COLUMNS = "id, name, address, city, locality, amenities, gender_preference, is_featured, rooms(id, rent_amount, is_vacant, capacity)" as const;
+type CityProperty = Pick<Tables<"properties">, "id" | "name" | "address" | "city" | "locality" | "amenities" | "gender_preference" | "is_featured"> & {
+  rooms: Pick<Tables<"rooms">, "id" | "rent_amount" | "is_vacant" | "capacity">[];
+  coverPhoto?: string;
+};
+
 const CityPGs = () => {
   const { city } = useParams<{ city: string }>();
   const cityInfo = cityData[city?.toLowerCase() || ""] || {
@@ -32,7 +39,7 @@ const CityPGs = () => {
     description: `Find verified PG accommodations in ${city}.`,
   };
 
-  const [properties, setProperties] = useState<any[]>([]);
+  const [properties, setProperties] = useState<CityProperty[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,11 +47,15 @@ const CityPGs = () => {
     const fetchProps = async () => {
       const { data } = await supabase
         .from("properties")
-        .select("id, name, address, city, locality, amenities, gender_preference, is_featured, rooms(id, rent_amount, is_vacant, capacity)")
+        .select(CITY_PG_COLUMNS)
         .eq("is_active", true)
         .ilike("city", `%${city}%`);
 
-      const { data: photos } = await supabase.from("property_photos").select("property_id, url, is_cover");
+      // Only this city's photos: this used to download every photo of every PG in the database.
+      const ids = (data ?? []).map((p) => p.id);
+      const { data: photos } = ids.length
+        ? await supabase.from("property_photos").select("property_id, url, is_cover").in("property_id", ids)
+        : { data: [] };
       const coverMap: Record<string, string> = {};
       (photos ?? []).forEach(p => { if (p.is_cover || !coverMap[p.property_id]) coverMap[p.property_id] = p.url; });
 
@@ -105,8 +116,8 @@ const CityPGs = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
               {properties.map((p, i) => {
-                const vacantRooms = (p.rooms || []).filter((r: any) => r.is_vacant);
-                const minRent = vacantRooms.length > 0 ? Math.min(...vacantRooms.map((r: any) => Number(r.rent_amount))) : 0;
+                const vacantRooms = (p.rooms || []).filter((r) => r.is_vacant);
+                const minRent = vacantRooms.length > 0 ? Math.min(...vacantRooms.map((r) => Number(r.rent_amount))) : 0;
                 return (
                   <motion.div key={p.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                     <Link to={`/pg/${p.id}`}>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { MessageSquare, Plus, CheckCircle, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,11 @@ const TenantComplaints = () => {
   const [category, setCategory] = useState("general");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!user) return;
     const [compRes, assignRes] = await Promise.all([
       supabase
@@ -57,28 +62,34 @@ const TenantComplaints = () => {
         .eq("is_active", true)
         .maybeSingle(),
     ]);
-    setComplaints(compRes.data ?? []);
+    later((s) => s.setComplaints(compRes.data ?? []));
 
     // Enrich assignment with bed info
     if (assignRes.data) {
-      const a = assignRes.data as any;
+      const a = assignRes.data;
       let bedLabel: string | undefined;
       let sharingType: string | undefined;
       if (a.bed_id) {
-        const { data: bed } = await (supabase as any).from("beds").select("bed_label, sharing_type").eq("id", a.bed_id).maybeSingle();
-        if (bed) { bedLabel = (bed as any).bed_label; sharingType = (bed as any).sharing_type; }
+        const { data: bed } = await supabase.from("beds").select("bed_label, sharing_type").eq("id", a.bed_id).maybeSingle();
+        if (bed) { bedLabel = bed.bed_label; sharingType = bed.sharing_type; }
       }
-      setAssignment({
+      later((s) => s.setAssignment({
         property_id: a.property_id,
         room_number: a.rooms?.room_number,
         bed_label: bedLabel,
         sharing_type: sharingType,
-      });
+      }));
     }
-    setLoading(false);
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { fetchData(); }, [user]);
+  const fetchData_setters = { setComplaints, setAssignment, setLoading };
+
+  const { refresh: fetchData } = usePageData(["TenantComplaints"], fetchData_load, applyTo(fetchData_setters), !!user);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

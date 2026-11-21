@@ -74,7 +74,7 @@ const TenantAnnouncements = () => {
                       {priorityIcon(a.priority)}
                       <div>
                         <h3 className="font-semibold">{a.title}</h3>
-                        <p className="text-xs text-muted-foreground">{(a as any).properties?.name} · {new Date(a.created_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-muted-foreground">{a.properties?.name} · {new Date(a.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                     {priorityBadge(a.priority)}

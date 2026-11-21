@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-type WhatsAppAction =
+/** Every action the twilio-notifications edge function accepts. Single source of truth. */
+export type WhatsAppAction =
   | "send-rent-reminder"
   | "send-announcement"
   | "send-complaint-alert"
@@ -27,7 +28,7 @@ export const useWhatsAppNotify = () => {
 
   const send = async (
     action: WhatsAppAction,
-    params: Record<string, any>
+    params: Record<string, unknown>
   ): Promise<WhatsAppResult | null> => {
     setLoading(true);
     try {
@@ -43,8 +44,8 @@ export const useWhatsAppNotify = () => {
 
       console.log(`[WhatsApp] ${action}:`, data);
       return data as WhatsAppResult;
-    } catch (err: any) {
-      console.warn("[WhatsApp] Dispatch failed (non-fatal):", err.message);
+    } catch (err) {
+      console.warn("[WhatsApp] Dispatch failed (non-fatal):", err instanceof Error ? err.message : err);
       return null;
     } finally {
       setLoading(false);

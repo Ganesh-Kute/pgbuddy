@@ -56,6 +56,17 @@ const getPresetRange = (key: PresetKey): { from: Date; to: Date } => {
   }
 };
 
+interface AnalyticsAssignment {
+  id: string;
+  property_id: string;
+  is_active: boolean;
+  move_in_date: string;
+  move_out_date: string | null;
+  custom_rent: number | null;
+  rooms: { rent_amount: number } | null;
+}
+interface AnalyticsPayment { property_id: string; amount: number; status: string; created_at: string }
+
 const TenantAnalytics = () => {
   const { user } = useAuth();
   const { effectiveOwnerId, isStaff, accessiblePropertyIds, loading: staffLoading } = useStaffAccess();
@@ -78,8 +89,8 @@ const TenantAnalytics = () => {
   const [rawData, setRawData] = useState<{
     properties: { id: string; name: string }[];
     rooms: { id: string; property_id: string; capacity: number; is_vacant: boolean }[];
-    assignments: any[];
-    payments: any[];
+    assignments: AnalyticsAssignment[];
+    payments: AnalyticsPayment[];
   }>({ properties: [], rooms: [], assignments: [], payments: [] });
 
   useEffect(() => {
@@ -101,7 +112,7 @@ const TenantAnalytics = () => {
     let effectivePropIds = (propData ?? []).map(p => p.id);
     
     // If staff, restrict to their accessible properties
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       effectivePropIds = effectivePropIds.filter(id => accessiblePropertyIds.includes(id));
     }
     
@@ -187,8 +198,8 @@ const TenantAnalytics = () => {
       const key = format(ms, "yyyy-MM");
       const label = format(ms, "MMM yy");
       const monthPayments = rangePayments.filter(p => p.created_at?.startsWith(key));
-      const collected = monthPayments.filter(p => p.status === "paid").reduce((s: number, p: any) => s + Number(p.amount), 0);
-      const pending = monthPayments.filter(p => p.status === "pending").reduce((s: number, p: any) => s + Number(p.amount), 0);
+      const collected = monthPayments.filter(p => p.status === "paid").reduce((s: number, p) => s + Number(p.amount), 0);
+      const pending = monthPayments.filter(p => p.status === "pending").reduce((s: number, p) => s + Number(p.amount), 0);
       return { month: label, collected, pending };
     });
     setRevenueTrendData(revTrend);
@@ -203,7 +214,7 @@ const TenantAnalytics = () => {
 
     const movedOut = rangeAssignments.filter(a => !a.is_active && a.move_out_date);
     const avgStay = movedOut.length > 0
-      ? Math.round(movedOut.reduce((s: number, a: any) => {
+      ? Math.round(movedOut.reduce((s: number, a) => {
           const inD = new Date(a.move_in_date).getTime();
           const outD = new Date(a.move_out_date).getTime();
           return s + (outD - inD) / (1000 * 60 * 60 * 24);

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/i18n/LanguageContext";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -18,7 +19,7 @@ const MealMenu = () => {
   const { toast } = useToast();
   const { t } = useLanguage();
   const { effectiveOwnerId, loading: staffLoading } = useStaffAccess();
-  const [properties, setProperties] = useState<any[]>([]);
+  const [properties, setProperties] = useState<Pick<Tables<"properties">, "id" | "name">[]>([]);
   const [selectedProperty, setSelectedProperty] = useState("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [menu, setMenu] = useState({ breakfast: "", lunch: "", dinner: "", snacks: "" });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { Plus, Home, Pencil, Trash2, IndianRupee, Bed, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
@@ -100,7 +102,11 @@ const Rooms = () => {
     triple: { enabled: false, rent: "", deposit: "" },
   });
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
 
     // Fetch properties first to scope everything
@@ -110,15 +116,15 @@ const Rooms = () => {
       .eq("owner_id", effectiveOwnerId);
 
     let fetchedProps = propData ?? [];
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetchedProps = fetchedProps.filter(p => accessiblePropertyIds.includes(p.id));
     }
     const propIds = fetchedProps.map(p => p.id);
 
     if (propIds.length === 0) {
-      setProperties([]);
-      setRooms([]);
-      setLoading(false);
+      later((s) => s.setProperties([]));
+      later((s) => s.setRooms([]));
+      later((s) => s.setLoading(false));
       return;
     }
 
@@ -127,18 +133,18 @@ const Rooms = () => {
 
     // Fetch beds using room IDs (beds table has room_id, not property_id)
     const roomIds = fetchedRooms.map(r => r.id);
-    let bedData: any[] = [];
+    let bedData: Tables<"beds">[] = [];
     if (roomIds.length > 0) {
       const { data } = await supabase.from("beds").select("*").in("room_id", roomIds).order("bed_label", { ascending: true });
       bedData = data ?? [];
     }
 
-    setProperties(fetchedProps);
-    setRooms(fetchedRooms);
+    later((s) => s.setProperties(fetchedProps));
+    later((s) => s.setRooms(fetchedRooms));
 
     // Build beds map grouped by room_id
     const map: Record<string, BedInfo[]> = {};
-    bedData.forEach((b: any) => {
+    bedData.forEach((b) => {
       if (!map[b.room_id]) map[b.room_id] = [];
       map[b.room_id].push({
         id: b.id,
@@ -149,11 +155,17 @@ const Rooms = () => {
         is_vacant: b.is_vacant,
       });
     });
-    setBedsMap(map);
-    setLoading(false);
+    later((s) => s.setBedsMap(map));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchData(); }, [effectiveOwnerId, staffLoading]);
+  const fetchData_setters = { setProperties, setRooms, setLoading, setBedsMap };
+
+  const { refresh: fetchData } = usePageData(["Rooms", effectiveOwnerId, isStaff, accessiblePropertyIds.join()], fetchData_load, applyTo(fetchData_setters), !staffLoading);
 
   const resetForm = () => {
     setPropertyId(""); setRoomNumber("");
@@ -436,7 +448,8 @@ const Rooms = () => {
       toast({ title: "Room deleted successfully" });
       fetchData();
       refetchBedCount();
-    } catch (err: any) {
+    } catch (caught) {
+      const err = caught instanceof Error ? caught : new Error(String(caught));
       toast({
         title: "Deletion failed",
         description: err.message || "An unexpected error occurred",
@@ -661,7 +674,7 @@ const Rooms = () => {
                     <div className="flex items-start justify-between">
                       <div>
                         <CardTitle className="text-lg">Room {r.room_number}</CardTitle>
-                        <p className="text-sm text-muted-foreground">{(r as any).properties?.name}</p>
+                        <p className="text-sm text-muted-foreground">{r.properties?.name}</p>
                       </div>
                       {stats.total === 0 ? (
                         <Badge variant="secondary">No beds</Badge>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -13,75 +13,79 @@ interface StaffAccess {
   staffPropertyId: string | null;
   /** Property IDs this user can access (own properties + staff-assigned properties) */
   accessiblePropertyIds: string[];
-  /** True while loading staff access info */
+  /** True until the signed-in user and their access are both known. Never fetch while true. */
   loading: boolean;
 }
 
+export type ResolvedAccess = Omit<StaffAccess, "loading">;
+
+const NO_ACCESS: ResolvedAccess = {
+  isStaff: false,
+  effectiveOwnerId: null,
+  staffRole: null,
+  staffPropertyId: null,
+  accessiblePropertyIds: [],
+};
+
+/** One staff_members row is enough: a user works for one owner at a time. */
+export async function fetchStaffAccess(userId: string, isStaff: boolean): Promise<ResolvedAccess> {
+  if (isStaff) {
+    const { data: staff, error } = await supabase
+      .from("staff_members")
+      .select("owner_id, role, property_id")
+      .eq("staff_user_id", userId)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (staff) {
+      const { data: propIds, error: rpcError } = await supabase.rpc("get_staff_property_ids", { _user_id: userId });
+      if (rpcError) throw rpcError;
+      return {
+        isStaff: true,
+        effectiveOwnerId: staff.owner_id,
+        staffRole: staff.role,
+        staffPropertyId: staff.property_id ?? null,
+        accessiblePropertyIds: propIds ?? [],
+      };
+    }
+    // The staff row went away since sign-in: fall through and treat the user as an owner.
+  }
+
+  const { data: own, error } = await supabase.from("properties").select("id").eq("owner_id", userId);
+  if (error) throw error;
+  return { ...NO_ACCESS, effectiveOwnerId: userId, accessiblePropertyIds: (own ?? []).map((p) => p.id) };
+}
+
+/** Query key for a user's access. Invalidate it after creating or deleting a property. */
+export const staffAccessKey = (userId: string | null | undefined) => ["staff-access", userId ?? null] as const;
+
 /**
- * Hook that provides unified property access for both owners and staff members.
- * - For owners: returns their own user ID and their own property IDs.
- * - For staff: returns the owner's ID and the staff-assigned property IDs.
- * 
+ * Unified property access for both owners and staff members.
+ * - For owners: their own user ID and their own property IDs.
+ * - For staff: the owner's ID and the staff-assigned property IDs.
+ *
+ * Cached per user and shared by every page and the layout, so a sidebar click does not refetch it.
  * Use `effectiveOwnerId` when querying `properties.owner_id`.
  * Use `accessiblePropertyIds` when filtering by property_id.
  */
 export const useStaffAccess = (): StaffAccess => {
-  const { user } = useAuth();
-  const [isStaff, setIsStaff] = useState(false);
-  const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
-  const [staffRole, setStaffRole] = useState<string | null>(null);
-  const [staffPropertyId, setStaffPropertyId] = useState<string | null>(null);
-  const [accessiblePropertyIds, setAccessiblePropertyIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, isStaff: authIsStaff, loading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
 
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+  const query = useQuery({
+    queryKey: [...staffAccessKey(userId), authIsStaff],
+    queryFn: () => fetchStaffAccess(userId as string, authIsStaff),
+    enabled: !!userId && !authLoading,
+    staleTime: 5 * 60_000,
+  });
 
-    const fetchAccess = async () => {
-      // Check if user is staff
-      const { data: staffData } = await supabase
-        .from("staff_members")
-        .select("owner_id, role, property_id")
-        .eq("staff_user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-
-      if (staffData) {
-        // User is staff
-        setIsStaff(true);
-        setEffectiveOwnerId(staffData.owner_id);
-        setStaffRole(staffData.role);
-        setStaffPropertyId(staffData.property_id ?? null);
-
-        // Get accessible property IDs via the RPC
-        const { data: propIds } = await supabase.rpc("get_staff_property_ids", {
-          _user_id: user.id,
-        });
-        setAccessiblePropertyIds(propIds ?? []);
-      } else {
-        // User is the owner
-        setIsStaff(false);
-        setEffectiveOwnerId(user.id);
-        setStaffRole(null);
-        setStaffPropertyId(null);
-
-        // Get owner's own property IDs
-        const { data: ownProps } = await supabase
-          .from("properties")
-          .select("id")
-          .eq("owner_id", user.id);
-        setAccessiblePropertyIds((ownProps ?? []).map((p) => p.id));
-      }
-
-      setLoading(false);
-    };
-
-    fetchAccess();
-  }, [user]);
-
-  return { isStaff, effectiveOwnerId, staffRole, staffPropertyId, accessiblePropertyIds, loading };
+  if (!userId) return { ...NO_ACCESS, loading: authLoading };
+  if (authLoading || query.isPending) return { ...NO_ACCESS, loading: true };
+  if (query.isError) {
+    // Fail closed: no properties. Owners still get their own id so their own rows load under RLS.
+    console.error("Could not load property access:", query.error);
+    return { ...NO_ACCESS, effectiveOwnerId: authIsStaff ? null : userId, loading: false };
+  }
+  return { ...query.data, loading: false };
 };

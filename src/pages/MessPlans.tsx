@@ -51,7 +51,7 @@ const MessPlans = ({ standalone = true }: { standalone?: boolean }) => {
 
   const fetchPlans = async () => {
     const { data } = await supabase
-      .from("mess_plans" as any)
+      .from("mess_plans")
       .select("*")
       .eq("owner_id", effectiveOwnerId!)
       .order("created_at", { ascending: true });
@@ -59,17 +59,17 @@ const MessPlans = ({ standalone = true }: { standalone?: boolean }) => {
     if (data) {
       // Get member counts per plan
       const { data: members } = await supabase
-        .from("mess_members" as any)
+        .from("mess_members")
         .select("plan_id")
         .eq("owner_id", effectiveOwnerId!)
         .eq("status", "active");
 
       const countMap: Record<string, number> = {};
-      (members ?? []).forEach((m: any) => {
+      (members ?? []).forEach((m) => {
         countMap[m.plan_id] = (countMap[m.plan_id] || 0) + 1;
       });
 
-      setPlans((data as any[]).map(p => ({ ...p, memberCount: countMap[p.id] || 0 })));
+      setPlans(data.map(p => ({ ...p, memberCount: countMap[p.id] || 0 })));
     }
     setLoading(false);
   };
@@ -106,10 +106,10 @@ const MessPlans = ({ standalone = true }: { standalone?: boolean }) => {
     };
 
     if (editing) {
-      await supabase.from("mess_plans" as any).update(payload).eq("id", editing.id);
+      await supabase.from("mess_plans").update(payload).eq("id", editing.id);
       toast({ title: "Plan updated!" });
     } else {
-      await supabase.from("mess_plans" as any).insert(payload);
+      await supabase.from("mess_plans").insert(payload);
       toast({ title: "Plan created!" });
     }
     setSaving(false);
@@ -120,13 +120,13 @@ const MessPlans = ({ standalone = true }: { standalone?: boolean }) => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this plan? Members on this plan will be unlinked.")) return;
-    await supabase.from("mess_plans" as any).delete().eq("id", id);
+    await supabase.from("mess_plans").delete().eq("id", id);
     toast({ title: "Plan deleted" });
     fetchPlans();
   };
 
   const toggleActive = async (plan: MessPlan) => {
-    await supabase.from("mess_plans" as any).update({ is_active: !plan.is_active }).eq("id", plan.id);
+    await supabase.from("mess_plans").update({ is_active: !plan.is_active }).eq("id", plan.id);
     fetchPlans();
   };
 

@@ -102,15 +102,15 @@ const PropertyDetail = () => {
 
       // Fetch reviewer profiles
       const reviewData = reviewRes.data ?? [];
-      const tenantIds = reviewData.filter(r => !(r as any).is_anonymous).map(r => (r as any).tenant_id);
-      let profilesMap: Record<string, { full_name: string }> = {};
+      const tenantIds = reviewData.filter(r => !r.is_anonymous).map(r => r.tenant_id);
+      const profilesMap: Record<string, { full_name: string }> = {};
       if (tenantIds.length > 0) {
         const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", tenantIds);
         profiles?.forEach(p => { profilesMap[p.user_id] = p; });
       }
       setReviews(reviewData.map(r => ({
-        ...(r as any),
-        profiles: (r as any).is_anonymous ? null : profilesMap[(r as any).tenant_id] || null,
+        ...r,
+        profiles: r.is_anonymous ? null : profilesMap[r.tenant_id] || null,
       })));
 
       setLoading(false);

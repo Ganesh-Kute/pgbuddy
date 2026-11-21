@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { BellDot, Calendar, CheckCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +28,11 @@ const Notices = () => {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchNotices = async () => {
+  const fetchNotices_load = async () => {
+
+    const later = deferSetters<typeof fetchNotices_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
     const { data } = await supabase
       .from("vacancy_notices")
@@ -35,14 +40,20 @@ const Notices = () => {
       .order("created_at", { ascending: false });
       
     let fetched = data ?? [];
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetched = fetched.filter(n => accessiblePropertyIds.includes(n.property_id));
     }
-    setNotices(fetched);
-    setLoading(false);
+    later((s) => s.setNotices(fetched));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchNotices(); }, [effectiveOwnerId, staffLoading]);
+  const fetchNotices_setters = { setNotices, setLoading };
+
+  const { refresh: fetchNotices } = usePageData(["Notices", effectiveOwnerId, isStaff, accessiblePropertyIds.join()], fetchNotices_load, applyTo(fetchNotices_setters), !staffLoading);
 
   const acknowledgeNotice = async (id: string) => {
     await supabase.from("vacancy_notices").update({ status: "acknowledged" }).eq("id", id);
@@ -76,7 +87,7 @@ const Notices = () => {
                   <div className="flex items-center gap-4">
                     <Calendar className="w-5 h-5 text-primary" />
                     <div>
-                      <p className="font-medium">{(n as any).properties?.name} · Room {(n as any).rooms?.room_number}</p>
+                      <p className="font-medium">{n.properties?.name} · Room {n.rooms?.room_number}</p>
                       <p className="text-sm text-muted-foreground">
                         Notice: {n.notice_date} → Move-out: {n.expected_move_out}
                       </p>

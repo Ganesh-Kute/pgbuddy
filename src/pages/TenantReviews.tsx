@@ -124,7 +124,7 @@ const TenantReviews = () => {
                 <Card key={a.property_id}>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{(a as any).properties?.name || "Property"}</CardTitle>
+                      <CardTitle className="text-lg">{a.properties?.name || "Property"}</CardTitle>
                       {existing && !isEditing && (
                         <div className="flex items-center gap-2">
                           <div className="flex gap-0.5">

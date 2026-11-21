@@ -11,7 +11,8 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useStaffAccess } from "@/hooks/useStaffAccess";
+import { useQueryClient } from "@tanstack/react-query";
+import { useStaffAccess, staffAccessKey } from "@/hooks/useStaffAccess";
 
 interface Property {
   id: string;
@@ -30,6 +31,12 @@ const Properties = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { effectiveOwnerId, isStaff, accessiblePropertyIds, loading: staffLoading } = useStaffAccess();
+  const queryClient = useQueryClient();
+  // Every page scopes its queries by the cached property list, so it must hear about adds and deletes.
+  const refreshAccess = () => {
+    queryClient.invalidateQueries({ queryKey: staffAccessKey(user?.id) });
+    queryClient.invalidateQueries({ queryKey: ["bed-count"] }); // a deleted property's rooms stop counting
+  };
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -47,15 +54,16 @@ const Properties = () => {
   const [amenitiesStr, setAmenitiesStr] = useState("");
 
   const fetchProperties = async () => {
-    if (!effectiveOwnerId) return;
-    const { data } = await supabase
+    if (!effectiveOwnerId) { setLoading(false); return; }
+    const { data, error } = await supabase
       .from("properties")
       .select("*")
       .eq("owner_id", effectiveOwnerId)
       .order("created_at", { ascending: false });
+    if (error) toast({ title: "Could not load properties", description: error.message, variant: "destructive" });
     let fetched = data ?? [];
     // Staff can only see their assigned properties
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetched = fetched.filter(p => accessiblePropertyIds.includes(p.id));
     }
     setProperties(fetched);
@@ -109,6 +117,7 @@ const Properties = () => {
       toast({ title: editingProperty ? "Property updated!" : "Property added!" });
       setDialogOpen(false);
       resetForm();
+      if (!editingProperty) refreshAccess();
       fetchProperties();
     }
     setSubmitting(false);
@@ -120,6 +129,7 @@ const Properties = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Property deleted" });
+      refreshAccess();
       fetchProperties();
     }
   };

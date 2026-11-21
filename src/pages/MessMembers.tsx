@@ -65,17 +65,17 @@ const MessMembers = ({ standalone = true }: { standalone?: boolean }) => {
 
   const fetchData = async () => {
     const [membersRes, plansRes] = await Promise.all([
-      supabase.from("mess_members" as any).select("*").eq("owner_id", effectiveOwnerId!).order("created_at", { ascending: false }),
-      supabase.from("mess_plans" as any).select("id, name, monthly_price").eq("owner_id", effectiveOwnerId!).eq("is_active", true),
+      supabase.from("mess_members").select("*").eq("owner_id", effectiveOwnerId!).order("created_at", { ascending: false }),
+      supabase.from("mess_plans").select("id, name, monthly_price").eq("owner_id", effectiveOwnerId!).eq("is_active", true),
     ]);
 
-    const plansData = (plansRes.data as any ?? []) as Plan[];
+    const plansData = (plansRes.data ?? []) as Plan[];
     setPlans(plansData);
 
     const planMap: Record<string, string> = {};
     plansData.forEach(p => { planMap[p.id] = p.name; });
 
-    setMembers((membersRes.data ?? []).map((m: any) => ({
+    setMembers((membersRes.data ?? []).map((m) => ({
       ...m,
       plan_name: m.plan_id ? planMap[m.plan_id] || "Unknown" : "No Plan",
     })));
@@ -120,10 +120,10 @@ const MessMembers = ({ standalone = true }: { standalone?: boolean }) => {
     };
 
     if (editing) {
-      await supabase.from("mess_members" as any).update(payload).eq("id", editing.id);
+      await supabase.from("mess_members").update(payload).eq("id", editing.id);
       toast({ title: "Member updated!" });
     } else {
-      await supabase.from("mess_members" as any).insert(payload);
+      await supabase.from("mess_members").insert(payload);
       toast({ title: "Member added!" });
     }
     setSaving(false);
@@ -134,14 +134,14 @@ const MessMembers = ({ standalone = true }: { standalone?: boolean }) => {
 
   const toggleStatus = async (member: MessMember) => {
     const newStatus = member.status === "active" ? "paused" : "active";
-    await supabase.from("mess_members" as any).update({ status: newStatus }).eq("id", member.id);
+    await supabase.from("mess_members").update({ status: newStatus }).eq("id", member.id);
     toast({ title: `Member ${newStatus}` });
     fetchData();
   };
 
   const cancelMember = async (id: string) => {
     if (!confirm("Cancel this member's subscription?")) return;
-    await supabase.from("mess_members" as any).update({ status: "cancelled", end_date: new Date().toISOString().split("T")[0] }).eq("id", id);
+    await supabase.from("mess_members").update({ status: "cancelled", end_date: new Date().toISOString().split("T")[0] }).eq("id", id);
     toast({ title: "Member cancelled" });
     fetchData();
   };

@@ -16,6 +16,7 @@ import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 
 interface Payment {
   id: string;
+  property_id: string;
   amount: number;
   month: string;
   status: string;
@@ -84,9 +85,9 @@ const TenantPayments = () => {
 
         // Fallback to owner default
         if (!info) {
-          const ownerId = (assignRes.data as any).properties?.owner_id;
+          const ownerId = assignRes.data.properties?.owner_id;
           if (ownerId) {
-            const { data: ownerDefault } = await (supabase as any)
+            const { data: ownerDefault } = await supabase
               .from("payment_info")
               .select("upi_id, bank_name, account_number, ifsc_code, account_holder")
               .is("property_id", null)
@@ -122,11 +123,16 @@ const TenantPayments = () => {
 
     const { data: urlData } = supabase.storage.from("payment-proofs").getPublicUrl(filePath);
 
-    await supabase.from("rent_payments").update({
+    const { error: saveError } = await supabase.from("rent_payments").update({
       proof_url: urlData.publicUrl,
       proof_uploaded_at: new Date().toISOString(),
       transaction_id: refNumber || null,
     }).eq("id", paymentId);
+    if (saveError) {
+      toast({ title: "Could not submit proof", description: saveError.message, variant: "destructive" });
+      setUploading(null);
+      return;
+    }
 
     toast({ title: "Payment proof submitted for approval!" });
     setUploading(null);
@@ -350,7 +356,7 @@ const TenantPayments = () => {
                           </>
                         )}
                         <div className="ml-auto">
-                          <RentReceipt payment={p as any} />
+                          <RentReceipt payment={p} />
                         </div>
                       </div>
                     </div>

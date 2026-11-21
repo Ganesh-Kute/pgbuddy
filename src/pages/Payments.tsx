@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { CreditCard, IndianRupee, CheckCircle, Clock, AlertTriangle, Plus, MessageCircle, FileText, History, Send } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -98,7 +99,11 @@ const Payments = () => {
   });
   const [amount, setAmount] = useState("");
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!user || !effectiveOwnerId) return;
 
     // 1. Fetch properties first to scope everything
@@ -107,20 +112,20 @@ const Payments = () => {
       .select("id, name")
       .eq("owner_id", effectiveOwnerId);
 
-    let propsData = (propData as any[]) ?? [];
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    let propsData = propData ?? [];
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       propsData = propsData.filter(p => accessiblePropertyIds.includes(p.id));
       if (selectedPropertyFilter === "all" && propsData.length === 1) {
-        setSelectedPropertyFilter(propsData[0].id);
+        later((s) => s.setSelectedPropertyFilter(propsData[0].id));
       }
     }
     const propIds = propsData.map(p => p.id);
 
     if (propIds.length === 0) {
-      setProperties([]);
-      setPayments([]);
-      setAssignments([]);
-      setLoading(false);
+      later((s) => s.setProperties([]));
+      later((s) => s.setPayments([]));
+      later((s) => s.setAssignments([]));
+      later((s) => s.setLoading(false));
       return;
     }
 
@@ -130,8 +135,8 @@ const Payments = () => {
       supabase.from("tenant_assignments").select("id, tenant_id, tenant_email, tenant_phone, property_id, room_id, custom_rent, rooms(room_number, rent_amount), properties(name)").eq("is_active", true).in("property_id", propIds),
     ]);
 
-    const payData = (payRes.data as any[]) ?? [];
-    const assignData = (assignRes.data as any[]) ?? [];
+    const payData = payRes.data ?? [];
+    const assignData = assignRes.data ?? [];
     
     // Fetch tenant names and phones
     const allTenantIds = [...new Set([
@@ -139,7 +144,7 @@ const Payments = () => {
       ...assignData.map(a => a.tenant_id)
     ])].filter(Boolean) as string[];
 
-    let profilesMap: Record<string, any> = {};
+    const profilesMap: Record<string, { full_name: string; phone: string | null }> = {};
     if (allTenantIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
@@ -150,7 +155,7 @@ const Payments = () => {
 
     // Resolve approved_by names
     const approverIds = [...new Set(payData.map(p => p.approved_by).filter(Boolean))] as string[];
-    let approverMap: Record<string, string> = {};
+    const approverMap: Record<string, string> = {};
     if (approverIds.length > 0) {
       const { data: approverProfiles } = await supabase
         .from("profiles")
@@ -159,23 +164,23 @@ const Payments = () => {
       approverProfiles?.forEach(p => { approverMap[p.user_id] = p.full_name; });
     }
 
-    const fetchedPayments = payData.map((p: any) => ({
+    const fetchedPayments = payData.map((p) => ({
       ...p,
       tenant_name: p.tenant_name || (p.tenant_id ? profilesMap[p.tenant_id]?.full_name : null),
       tenant_phone: p.tenant_phone || (p.tenant_id ? profilesMap[p.tenant_id]?.phone : null),
       approved_by_name: p.approved_by ? approverMap[p.approved_by] || "Owner/Manager" : null,
     }));
-    const fetchedAssignments = assignData.map((a: any) => ({ 
+    const fetchedAssignments = assignData.map((a) => ({ 
       ...a, 
       profiles: a.tenant_id ? profilesMap[a.tenant_id] : null 
     })) as ActiveAssignment[];
 
-    setProperties(propsData);
-    setPayments(fetchedPayments);
-    setAssignments(fetchedAssignments);
+    later((s) => s.setProperties(propsData));
+    later((s) => s.setPayments(fetchedPayments));
+    later((s) => s.setAssignments(fetchedAssignments));
 
     // Fetch activity logs for rent_payments
-    const { data: logData } = await (supabase as any)
+    const { data: logData } = await supabase
       .from("audit_logs")
       .select("id, description, created_at, user_id")
       .eq("table_name", "rent_payments")
@@ -184,8 +189,8 @@ const Payments = () => {
 
     if (logData) {
       // Resolve user names for log entries
-      const logUserIds = [...new Set((logData as any[]).map((l: any) => l.user_id).filter(Boolean))] as string[];
-      let logUserMap: Record<string, string> = {};
+      const logUserIds = [...new Set(logData.map((l) => l.user_id).filter(Boolean))] as string[];
+      const logUserMap: Record<string, string> = {};
       if (logUserIds.length > 0) {
         const { data: logProfiles } = await supabase
           .from("profiles")
@@ -193,12 +198,12 @@ const Payments = () => {
           .in("user_id", logUserIds);
         logProfiles?.forEach(p => { logUserMap[p.user_id] = p.full_name; });
       }
-      setActivityLogs((logData as any[]).map((l: any) => ({
+      later((s) => s.setActivityLogs(logData.map((l) => ({
         id: l.id,
         description: l.description,
         created_at: l.created_at,
         user_name: logUserMap[l.user_id] || "System",
-      })));
+      }))));
     }
     
     // Trigger auto-billing in background only once per mount
@@ -207,10 +212,14 @@ const Payments = () => {
       autoBilling(fetchedAssignments, fetchedPayments);
     }
     
-    setLoading(false);
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  const autoBilling = async (currentAssignments: any[], currentPayments: any[]) => {
+  const autoBilling = async (currentAssignments: ActiveAssignment[], currentPayments: Payment[]) => {
     const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
     
     // Match payments by tenant_id, tenant_email, OR tenant_phone for the current month (rent only)
@@ -247,7 +256,9 @@ const Payments = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, [user, staffLoading]);
+  const fetchData_setters = { setSelectedPropertyFilter, setProperties, setPayments, setAssignments, setLoading, setActivityLogs };
+
+  const { refresh: fetchData } = usePageData(["Payments", effectiveOwnerId, isStaff, accessiblePropertyIds.join()], fetchData_load, applyTo(fetchData_setters), !staffLoading && !!user);
 
   const handleGenerate = async () => {
     if (!selectedAssignment || !month) return;
@@ -258,7 +269,7 @@ const Payments = () => {
 
     // For rent, check for duplicate month. Don't restrict duplicate deposits.
     if (manualType === "rent") {
-      let query = (supabase as any)
+      let query = supabase
         .from("rent_payments")
         .select("id", { count: "exact", head: true })
         .eq("month", month)
@@ -316,7 +327,7 @@ const Payments = () => {
       .eq("month", month)
       .eq("payment_type", "rent");
 
-    const existingRent = (existing as any[]) ?? [];
+    const existingRent = existing ?? [];
     const existingTenantIds = new Set(existingRent.map(e => e.tenant_id).filter(Boolean));
     const existingEmails = new Set(existingRent.map(e => e.tenant_email).filter(Boolean));
     const existingPhones = new Set(existingRent.map(e => e.tenant_phone).filter(Boolean));
@@ -340,7 +351,7 @@ const Payments = () => {
       tenant_phone: a.tenant_phone,
       property_id: a.property_id,
       room_id: a.room_id,
-      amount: Number((a as any).custom_rent ?? a.rooms?.rent_amount ?? 0),
+      amount: Number(a.custom_rent ?? a.rooms?.rent_amount ?? 0),
       month,
       status: "pending",
       payment_type: "rent",
@@ -369,8 +380,8 @@ const Payments = () => {
       tenant_name: payment.tenant_name || "Tenant",
       amount: payment.amount,
       month: payment.month,
-      property_name: (payment as any).properties?.name || "your PG",
-      room_number: (payment as any).rooms?.room_number || "N/A",
+      property_name: payment.properties?.name || "your PG",
+      room_number: payment.rooms?.room_number || "N/A",
       receipt_url: window.location.origin.includes('localhost') 
         ? `https://pgbuddy-zeta-rust.vercel.app/receipt/${payment.id}` 
         : `${window.location.origin}/receipt/${payment.id}`,
@@ -476,8 +487,8 @@ const Payments = () => {
     sendWhatsApp("send-rent-reminder", {
       tenant_ids: payment.tenant_id ? [payment.tenant_id] : [],
       tenant_phone: payment.tenant_phone,
-      property_name: (payment as any).properties?.name || "your PG",
-      room_number: (payment as any).rooms?.room_number || "N/A",
+      property_name: payment.properties?.name || "your PG",
+      room_number: payment.rooms?.room_number || "N/A",
       amount: payment.amount,
       month: payment.month,
     });
@@ -506,8 +517,8 @@ const Payments = () => {
       toast({ title: "Demo sent! ✅", description: `Check WhatsApp on ${demoPhone.trim()}` });
       setDemoOpen(false);
       setDemoPhone("");
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
     }
     setDemoSending(false);
   };
@@ -607,7 +618,7 @@ const Payments = () => {
                         <SelectContent>
                           {assignments.map(a => (
                             <SelectItem key={a.id} value={a.id}>
-                              {a.profiles?.full_name || a.tenant_email || "Pending Tenant"} — {(a.properties as any)?.name} Room {(a.rooms as any)?.room_number}
+                              {a.profiles?.full_name || a.tenant_email || "Pending Tenant"} — {a.properties?.name} Room {a.rooms?.room_number}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -683,7 +694,7 @@ const Payments = () => {
                             {statusIcon(p.status)}
                             <div>
                               <p className="font-medium">
-                                {(p as any).properties?.name} · Room {(p as any).rooms?.room_number}
+                                {p.properties?.name} · Room {p.rooms?.room_number}
                                 {p.payment_type === "deposit" && (
                                   <Badge variant="outline" className="ml-2 text-[10px] bg-primary/10 text-primary border-primary/20">Security Deposit</Badge>
                                 )}
@@ -717,11 +728,11 @@ const Payments = () => {
                             </div>
                           </div>
                         </div>
-                        {(p as any).proof_url && (
+                        {p.proof_url && (
                           <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 border-t border-border">
                             <CheckCircle className="w-3 h-3 text-success" />
                             <span>Payment proof uploaded</span>
-                            <a href={(p as any).proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View proof</a>
+                            <a href={p.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View proof</a>
                           </div>
                         )}
                       </CardContent>
@@ -747,7 +758,7 @@ const Payments = () => {
                             <FileText className="w-5 h-5 text-primary" />
                             <div>
                               <p className="font-medium">
-                                {(p as any).properties?.name} · Room {(p as any).rooms?.room_number}
+                                {p.properties?.name} · Room {p.rooms?.room_number}
                                 {p.payment_type === "deposit" && (
                                   <Badge variant="outline" className="ml-2 text-[10px] bg-primary/10 text-primary border-primary/20">Security Deposit</Badge>
                                 )}
@@ -803,7 +814,7 @@ const Payments = () => {
                           <div className="flex items-center gap-4">
                             {statusIcon(p.status)}
                             <div>
-                              <p className="font-medium">{(p as any).properties?.name} · Room {(p as any).rooms?.room_number}</p>
+                              <p className="font-medium">{p.properties?.name} · Room {p.rooms?.room_number}</p>
                               <p className="text-sm font-medium">{p.tenant_name || p.tenant_email}</p>
                               <p className="text-xs text-muted-foreground">{p.month}</p>
                             </div>
@@ -825,11 +836,11 @@ const Payments = () => {
                             {p.transaction_id && <p><strong>Ref No:</strong> {p.transaction_id}</p>}
                           </div>
                         )}
-                        {(p as any).proof_url && (
+                        {p.proof_url && (
                           <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
                             <CheckCircle className="w-3 h-3 text-success" />
                             <span>Payment proof uploaded</span>
-                            <a href={(p as any).proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View proof</a>
+                            <a href={p.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View proof</a>
                           </div>
                         )}
                         {p.approved_by_name && (

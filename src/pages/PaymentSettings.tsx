@@ -62,7 +62,7 @@ const PaymentSettings = () => {
   useEffect(() => {
     if (!selectedProperty || !effectiveOwnerId) return;
     const fetchInfo = async () => {
-      let query = (supabase as any).from("payment_info").select("*");
+      let query = supabase.from("payment_info").select("*");
       if (selectedProperty === "default") {
         query = query.is("property_id", null).eq("owner_id", effectiveOwnerId);
       } else {
@@ -111,7 +111,7 @@ const PaymentSettings = () => {
     } else {
       toast({ title: "Payment info saved!" });
       // Refresh
-      let query = (supabase as any).from("payment_info").select("*");
+      let query = supabase.from("payment_info").select("*");
       if (selectedProperty === "default") {
         query = query.is("property_id", null).eq("owner_id", effectiveOwnerId);
       } else {
