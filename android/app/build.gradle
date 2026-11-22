@@ -1,5 +1,18 @@
 apply plugin: 'com.android.application'
 
+def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+def keyAliasValue = System.getenv("ANDROID_KEY_ALIAS")
+def keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD")
+def hasReleaseSigning = Boolean.valueOf(
+    keystorePath != null && !keystorePath.isEmpty() &&
+    keystorePassword != null && !keystorePassword.isEmpty() &&
+    keyAliasValue != null && !keyAliasValue.isEmpty() &&
+    keyPasswordValue != null && !keyPasswordValue.isEmpty() &&
+    file(keystorePath).exists()
+)
+def isBundleTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains('bundle') } || project.hasProperty('buildingBundle')
+
 android {
     namespace = "com.pgbuddy.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -17,10 +30,30 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(keystorePath)
+                storePassword keystorePassword
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue
+            }
+        }
+    }
+    splits {
+        abi {
+            enable !isBundleTask
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a'
+            universalApk true
+        }
+    }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig = hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
         }
     }
     packaging {

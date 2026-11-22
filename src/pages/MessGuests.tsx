@@ -53,13 +53,13 @@ const MessGuests = () => {
 
   const fetchGuestMeals = async () => {
     const { data, error } = await supabase
-      .from("mess_one_time_meals" as any)
+      .from("mess_one_time_meals")
       .select("*")
       .eq("owner_id", effectiveOwnerId!)
       .order("meal_date", { ascending: false });
 
     if (!error) {
-      setGuestMeals((data as any) || []);
+      setGuestMeals((data ?? []) as GuestMeal[]);
     }
     setLoading(false);
   };
@@ -70,7 +70,7 @@ const MessGuests = () => {
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("mess_one_time_meals" as any).insert({
+    const { error } = await supabase.from("mess_one_time_meals").insert({
       owner_id: effectiveOwnerId!,
       guest_name: guestName || "Guest",
       guest_phone: guestPhone || null,
@@ -102,7 +102,7 @@ const MessGuests = () => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this record?")) return;
-    await supabase.from("mess_one_time_meals" as any).delete().eq("id", id);
+    await supabase.from("mess_one_time_meals").delete().eq("id", id);
     toast({ title: "Record deleted" });
     fetchGuestMeals();
   };

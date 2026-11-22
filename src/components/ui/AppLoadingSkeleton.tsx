@@ -19,12 +19,14 @@ export const AppLoadingSkeleton = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
         {/* Mobile Header Skeleton - visible only on mobile */}
-        <div className="lg:hidden fixed top-0 left-0 right-0 h-14 border-b border-border/50 bg-background/80 flex items-center justify-between px-4 z-40">
-          <div className="flex items-center gap-2">
-            <Skeleton className="w-8 h-8 rounded-lg" />
-            <Skeleton className="w-20 h-5" />
+        <div className="lg:hidden fixed top-0 left-0 right-0 pt-safe border-b border-border/50 bg-background/80 z-40">
+          <div className="h-14 flex items-center justify-between px-4">
+            <div className="flex items-center gap-2">
+              <Skeleton className="w-8 h-8 rounded-lg" />
+              <Skeleton className="w-20 h-5" />
+            </div>
+            <Skeleton className="w-11 h-11 rounded-lg" />
           </div>
-          <Skeleton className="w-8 h-8 rounded-lg" />
         </div>
 
         {/* Content Area */}

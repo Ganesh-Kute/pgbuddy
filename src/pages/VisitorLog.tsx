@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { UserCheck, Plus, LogIn, LogOut, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,11 @@ const VisitorLog = () => {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
     const [visRes, propRes] = await Promise.all([
       supabase.from("visitor_logs").select("*, properties(name)").order("check_in", { ascending: false }).limit(50),
@@ -51,18 +56,24 @@ const VisitorLog = () => {
     let fetchedVisitors = visRes.data ?? [];
     let props = propRes.data ?? [];
 
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetchedVisitors = fetchedVisitors.filter(v => accessiblePropertyIds.includes(v.property_id));
       props = props.filter(p => accessiblePropertyIds.includes(p.id));
     }
 
-    setVisitors(fetchedVisitors);
-    setProperties(props);
-    if (props.length === 1 && !propId) setPropId(props[0].id);
-    setLoading(false);
+    later((s) => s.setVisitors(fetchedVisitors));
+    later((s) => s.setProperties(props));
+    if (props.length === 1 && !propId) later((s) => s.setPropId(props[0].id));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchData(); }, [effectiveOwnerId, staffLoading]);
+  const fetchData_setters = { setVisitors, setProperties, setPropId, setLoading };
+
+  const { refresh: fetchData } = usePageData(["VisitorLog", effectiveOwnerId, isStaff, accessiblePropertyIds.join()], fetchData_load, applyTo(fetchData_setters), !staffLoading);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,7 +185,7 @@ const VisitorLog = () => {
                     <div>
                       <p className="font-medium">{v.visitor_name}</p>
                       <p className="text-sm text-muted-foreground capitalize">
-                        {v.purpose} · {(v as any).properties?.name} · {new Date(v.check_in).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        {v.purpose} · {v.properties?.name} · {new Date(v.check_in).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                       </p>
                       {v.visitor_phone && <p className="text-xs text-muted-foreground">{v.visitor_phone}</p>}
                     </div>

@@ -71,7 +71,7 @@ const TenantMoveOut = () => {
         .eq("is_active", true)
         .maybeSingle();
 
-      setAssignment(asg as any);
+      setAssignment(asg);
 
       if (asg) {
         const { data: req } = await supabase
@@ -84,7 +84,7 @@ const TenantMoveOut = () => {
         if (req) {
           setExistingRequest({
             ...req,
-            deductions: Array.isArray(req.deductions) ? req.deductions as any : [],
+            deductions: Array.isArray(req.deductions) ? req.deductions as unknown as { label: string; amount: number }[] : [],
             checklist: (req.checklist ?? {}) as Record<string, boolean>,
           });
         }
@@ -125,7 +125,7 @@ const TenantMoveOut = () => {
       if (req) {
         setExistingRequest({
           ...req,
-          deductions: Array.isArray(req.deductions) ? req.deductions as any : [],
+          deductions: Array.isArray(req.deductions) ? req.deductions as unknown as { label: string; amount: number }[] : [],
           checklist: (req.checklist ?? {}) as Record<string, boolean>,
         });
       }

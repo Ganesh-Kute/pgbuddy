@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { BellDot, Plus, Calendar, CheckCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,11 @@ const TenantNotices = () => {
   const [moveOutDate, setMoveOutDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!user) return;
     const [noticeRes, assignRes] = await Promise.all([
       supabase
@@ -54,13 +59,19 @@ const TenantNotices = () => {
         .maybeSingle(),
     ]);
     const data = noticeRes.data ?? [];
-    setNotices(data);
-    setAssignment(assignRes.data);
-    setHasActiveNotice(data.some(n => n.status === "submitted"));
-    setLoading(false);
+    later((s) => s.setNotices(data));
+    later((s) => s.setAssignment(assignRes.data));
+    later((s) => s.setHasActiveNotice(data.some(n => n.status === "submitted")));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { fetchData(); }, [user]);
+  const fetchData_setters = { setNotices, setAssignment, setHasActiveNotice, setLoading };
+
+  const { refresh: fetchData } = usePageData(["TenantNotices"], fetchData_load, applyTo(fetchData_setters), !!user);
 
   // Default move-out date: 1 month from today
   useEffect(() => {

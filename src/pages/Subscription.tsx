@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Plan {
   id: string;
@@ -34,9 +35,15 @@ interface Subscription {
   current_period_end: string | null;
 }
 
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_subscription_id: string;
+  razorpay_signature: string;
+}
+
 declare global {
   interface Window {
-    Razorpay: any;
+    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
   }
 }
 
@@ -58,6 +65,15 @@ const Subscription = () => {
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [tenantCount, setTenantCount] = useState(0);
+
+  const queryClient = useQueryClient();
+  /** Re-read this user's subscription, and the cached plan every page gates features on. */
+  const refreshSubscription = async () => {
+    if (!user) return;
+    const { data: subData } = await supabase.from("subscriptions").select("*").eq("user_id", user.id).eq("status", "active").maybeSingle();
+    setCurrentSub(subData);
+    await queryClient.invalidateQueries({ queryKey: ["subscription-plan"] });
+  };
 
   // Redirect staff to dashboard
   useEffect(() => {
@@ -127,9 +143,7 @@ const Subscription = () => {
       if (data.free) {
         toast({ title: "You're on the Free plan!" });
         setSubscribing(null);
-        // Refresh
-        const { data: subData } = await supabase.from("subscriptions").select("*").eq("user_id", user.id).eq("status", "active").maybeSingle();
-        setCurrentSub(subData);
+        await refreshSubscription();
         return;
       }
 
@@ -139,24 +153,24 @@ const Subscription = () => {
         subscription_id: data.subscription_id,
         name: "PGManager",
         description: `${data.plan_name} Plan (${data.billing_cycle})`,
-        handler: async function (response: any) {
+        handler: async function (response: RazorpayResponse) {
           toast({ title: "Payment successful!", description: "Activating your subscription..." });
-          try {
-            // Verify and activate subscription server-side
-            await supabase.functions.invoke("verify-subscription-payment", {
-              body: {
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_subscription_id: response.razorpay_subscription_id,
-                razorpay_signature: response.razorpay_signature,
-              },
-            });
+          // Verify and activate server-side. invoke() reports failure in `error`; it does not throw.
+          const { error: verifyError } = await supabase.functions.invoke("verify-subscription-payment", {
+            body: {
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_subscription_id: response.razorpay_subscription_id,
+              razorpay_signature: response.razorpay_signature,
+            },
+          });
+          if (verifyError) {
+            console.error("Verify failed, will retry via webhook", verifyError);
+            toast({ title: "Payment received, activation pending", description: "Your plan will switch on within a few minutes. No need to pay again." });
+          } else {
             toast({ title: "Subscription activated!", description: "You now have access to Pro features." });
-          } catch (e) {
-            console.error("Verify failed, will retry via webhook", e);
           }
-          // Refresh subscription
-          const { data: subData } = await supabase.from("subscriptions").select("*").eq("user_id", user.id).eq("status", "active").maybeSingle();
-          setCurrentSub(subData);
+          setSubscribing(null);
+          await refreshSubscription();
         },
         prefill: {
           email: user.email,
@@ -173,10 +187,11 @@ const Subscription = () => {
 
       const rzp = new window.Razorpay(options);
       rzp.open();
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+      setSubscribing(null);
     }
-    setSubscribing(null);
+    // On success the spinner stays until checkout closes (ondismiss) or the payment handler finishes.
   };
 
   const currentPlan = getCurrentPlan();

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { LogOut, CheckCircle, Clock, IndianRupee, ClipboardCheck, AlertTriangle, Eye, Plus, Minus, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +67,11 @@ const MoveOutManagement = () => {
   const [refundNotes, setRefundNotes] = useState("");
   const [actualMoveOutDate, setActualMoveOutDate] = useState("");
 
-  const fetchRequests = useCallback(async () => {
+  const fetchRequests_load = async () => {
+
+    const later = deferSetters<typeof fetchRequests_setters>();
+
+    await (async () => {
     if (!user) return;
     const { data } = await supabase
       .from("move_out_requests")
@@ -75,25 +80,32 @@ const MoveOutManagement = () => {
 
     if (data) {
       // Fetch tenant profiles
-      const tenantIds = [...new Set(data.map((r: any) => r.tenant_id))];
+      const tenantIds = [...new Set(data.map((r) => r.tenant_id))];
       const { data: profiles } = await supabase
         .from("profiles")
         .select("user_id, full_name, phone")
         .in("user_id", tenantIds);
 
       const profileMap = new Map((profiles ?? []).map(p => [p.user_id, p]));
-      const enriched = data.map((r: any) => ({
+      const enriched = data.map((r) => ({
         ...r,
         deductions: Array.isArray(r.deductions) ? r.deductions : [],
         checklist: r.checklist ?? {},
         profiles: profileMap.get(r.tenant_id) ?? { full_name: "Unknown", phone: null },
       }));
-      setRequests(enriched);
+      // deductions/checklist are JSON columns: their shape is this page's own convention
+      later((s) => s.setRequests(enriched as unknown as MoveOutRequest[]));
     }
-    setLoading(false);
-  }, [user]);
+    later((s) => s.setLoading(false));
+  })();
 
-  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+    return later.commits;
+
+  };
+
+  const fetchRequests_setters = { setRequests, setLoading };
+
+  const { refresh: fetchRequests } = usePageData(["MoveOutManagement"], fetchRequests_load, applyTo(fetchRequests_setters), !!user);
 
   const openDetail = (req: MoveOutRequest) => {
     setSelectedRequest(req);

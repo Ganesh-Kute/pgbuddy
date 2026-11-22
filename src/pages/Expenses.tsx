@@ -64,7 +64,7 @@ const Expenses = () => {
     let fetchedExpenses = expRes.data ?? [];
     let fetchedProperties = propRes.data ?? [];
 
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetchedExpenses = fetchedExpenses.filter(e => accessiblePropertyIds.includes(e.property_id));
       fetchedProperties = fetchedProperties.filter(p => accessiblePropertyIds.includes(p.id));
     }
@@ -238,7 +238,7 @@ const Expenses = () => {
                     <div>
                       <p className="font-medium capitalize">{e.category}</p>
                       <p className="text-sm text-muted-foreground">
-                        {(e as any).properties?.name} · {e.expense_date}
+                        {e.properties?.name} · {e.expense_date}
                       </p>
                       {e.description && <p className="text-xs text-muted-foreground mt-1">{e.description}</p>}
                     </div>

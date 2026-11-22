@@ -7,19 +7,30 @@
  *        node generate-pitches.js --dry-run    (preview only, don't queue)
  */
 
+try { require("dotenv").config(); } catch { /* dotenv optional if env is already set */ }
 const fs = require("fs");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 
 // ── Config ──
-const GROQ_API_KEY = process.env.GROQ_API_KEY || "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";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://vcpohetbsyyjqqkzuzxj.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjcG9oZXRic3l5anFxa3p1enhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzcxNzk0NSwiZXhwIjoyMDg5MjkzOTQ1fQ.p96BgDmdWhjuP4U_6KFPwYjnUBgAiOe88nKtia3hIoA";
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const DRY_RUN = process.argv.includes("--dry-run");
+
+if (!GROQ_API_KEY) {
+  console.error("❌ GROQ_API_KEY environment variable is required.");
+  process.exit(1);
+}
+if (!DRY_RUN && (!SUPABASE_URL || !SUPABASE_KEY)) {
+  console.error("❌ SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required unless --dry-run is passed.");
+  process.exit(1);
+}
+
 const LEADS_FILE = path.join(__dirname, "pg_leads.json");
 const OUTPUT_FILE = path.join(__dirname, "pg_pitches.json");
 
@@ -90,7 +101,7 @@ async function main() {
     return;
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  const supabase = DRY_RUN ? null : createClient(SUPABASE_URL, SUPABASE_KEY);
   const pitches = [];
 
   for (let i = 0; i < leads.length; i++) {

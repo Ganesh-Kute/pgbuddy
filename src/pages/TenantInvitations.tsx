@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { Link, Plus, Copy, UserCheck, Clock, XCircle, Share2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,7 +45,11 @@ const TenantInvitations = () => {
   const [tenantPhone, setTenantPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
 
     // Fetch properties first to scope everything
@@ -56,10 +61,10 @@ const TenantInvitations = () => {
     const propIds = fetchedProps.map(p => p.id);
 
     if (propIds.length === 0) {
-      setInvitations([]);
-      setProperties([]);
-      setRooms([]);
-      setLoading(false);
+      later((s) => s.setInvitations([]));
+      later((s) => s.setProperties([]));
+      later((s) => s.setRooms([]));
+      later((s) => s.setLoading(false));
       return;
     }
 
@@ -67,13 +72,19 @@ const TenantInvitations = () => {
       supabase.from("tenant_invitations").select("*, rooms(room_number), properties(name)").in("property_id", propIds).order("created_at", { ascending: false }),
       supabase.from("rooms").select("id, room_number, property_id, is_vacant").in("property_id", propIds),
     ]);
-    setInvitations(invRes.data ?? []);
-    setProperties(fetchedProps);
-    setRooms(roomRes.data ?? []);
-    setLoading(false);
+    later((s) => s.setInvitations(invRes.data ?? []));
+    later((s) => s.setProperties(fetchedProps));
+    later((s) => s.setRooms(roomRes.data ?? []));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchData(); }, [effectiveOwnerId, staffLoading]);
+  const fetchData_setters = { setInvitations, setProperties, setRooms, setLoading };
+
+  const { refresh: fetchData } = usePageData(["TenantInvitations", effectiveOwnerId], fetchData_load, applyTo(fetchData_setters), !staffLoading);
 
   const vacantRoomsForProperty = rooms.filter(r => r.property_id === propertyId && r.is_vacant);
 
@@ -190,7 +201,7 @@ const TenantInvitations = () => {
                           {inv.tenant_name || inv.tenant_email || "Anonymous Tenant"}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {(inv as any).properties?.name} · Room {(inv as any).rooms?.room_number}
+                          {inv.properties?.name} · Room {inv.rooms?.room_number}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Created {new Date(inv.created_at).toLocaleDateString()} · Expires {new Date(inv.expires_at).toLocaleDateString()}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { Megaphone, Plus, Trash2, AlertTriangle, Info, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -47,7 +48,11 @@ const Announcements = () => {
   const [priority, setPriority] = useState("normal");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
     const [annRes, propRes] = await Promise.all([
       supabase.from("announcements").select("*, properties(name)").order("created_at", { ascending: false }),
@@ -56,17 +61,23 @@ const Announcements = () => {
     let fetchedAnns = annRes.data ?? [];
     let fetchedProps = propRes.data ?? [];
 
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetchedAnns = fetchedAnns.filter(a => accessiblePropertyIds.includes(a.property_id));
       fetchedProps = fetchedProps.filter(p => accessiblePropertyIds.includes(p.id));
     }
 
-    setAnnouncements(fetchedAnns);
-    setProperties(fetchedProps);
-    setLoading(false);
+    later((s) => s.setAnnouncements(fetchedAnns));
+    later((s) => s.setProperties(fetchedProps));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchData(); }, [effectiveOwnerId, staffLoading]);
+  const fetchData_setters = { setAnnouncements, setProperties, setLoading };
+
+  const { refresh: fetchData } = usePageData(["Announcements", effectiveOwnerId, isStaff, accessiblePropertyIds.join()], fetchData_load, applyTo(fetchData_setters), !staffLoading);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,7 +209,7 @@ const Announcements = () => {
                       {priorityIcon(a.priority)}
                       <div>
                         <h3 className="font-semibold">{a.title}</h3>
-                        <p className="text-xs text-muted-foreground">{(a as any).properties?.name} · {new Date(a.created_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-muted-foreground">{a.properties?.name} · {new Date(a.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

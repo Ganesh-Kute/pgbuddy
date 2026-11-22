@@ -67,7 +67,7 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
   const fetchPayments = async () => {
     setLoading(true);
     const { data } = await supabase
-      .from("mess_payments" as any)
+      .from("mess_payments")
       .select("*")
       .eq("month", selectedMonth);
 
@@ -78,23 +78,23 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
     }
 
     // Enrich with member names
-    const memberIds = [...new Set((data as any[]).map(d => d.member_id))];
+    const memberIds = [...new Set(data.map(d => d.member_id))];
     const { data: members } = await supabase
-      .from("mess_members" as any)
+      .from("mess_members")
       .select("id, full_name, plan_id, phone")
       .in("id", memberIds);
 
     const { data: plans } = await supabase
-      .from("mess_plans" as any)
+      .from("mess_plans")
       .select("id, name")
       .eq("owner_id", effectiveOwnerId!);
 
-    const memberMap: Record<string, any> = {};
-    (members ?? []).forEach((m: any) => { memberMap[m.id] = m; });
+    const memberMap: Record<string, NonNullable<typeof members>[number]> = {};
+    (members ?? []).forEach((m) => { memberMap[m.id] = m; });
     const planMap: Record<string, string> = {};
-    (plans ?? []).forEach((p: any) => { planMap[p.id] = p.name; });
+    (plans ?? []).forEach((p) => { planMap[p.id] = p.name; });
 
-    setPayments((data as any[]).map(p => ({
+    setPayments(data.map(p => ({
       ...p,
       member_name: memberMap[p.member_id]?.full_name || "Unknown",
       member_phone: memberMap[p.member_id]?.phone || null,
@@ -107,7 +107,7 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
     setGenerating(true);
     // Get active members with plans
     const { data: members } = await supabase
-      .from("mess_members" as any)
+      .from("mess_members")
       .select("id, plan_id")
       .eq("owner_id", effectiveOwnerId!)
       .eq("status", "active");
@@ -120,12 +120,12 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
 
     // Get plan prices
     const { data: plans } = await supabase
-      .from("mess_plans" as any)
+      .from("mess_plans")
       .select("id, monthly_price")
       .eq("owner_id", effectiveOwnerId!);
 
     const priceMap: Record<string, number> = {};
-    (plans ?? []).forEach((p: any) => { priceMap[p.id] = p.monthly_price; });
+    (plans ?? []).forEach((p) => { priceMap[p.id] = p.monthly_price; });
 
     // Get off day counts for this month
     const monthStart = `${selectedMonth}-01`;
@@ -133,21 +133,21 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     const monthEnd = format(nextMonth, "yyyy-MM-dd");
 
-    const memberIds = (members as any[]).map(m => m.id);
+    const memberIds = members.map(m => m.id);
     const { data: offDays } = await supabase
-      .from("mess_off_days" as any)
+      .from("mess_off_days")
       .select("member_id, off_date")
       .in("member_id", memberIds)
       .gte("off_date", monthStart)
       .lt("off_date", monthEnd);
 
     const offCountMap: Record<string, number> = {};
-    (offDays ?? []).forEach((o: any) => {
+    (offDays ?? []).forEach((o) => {
       offCountMap[o.member_id] = (offCountMap[o.member_id] || 0) + 1;
     });
 
     let created = 0;
-    for (const m of (members as any[])) {
+    for (const m of members) {
       const basePrice = m.plan_id ? (priceMap[m.plan_id] || 0) : 0;
       const daysInMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 0).getDate();
       const offCount = offCountMap[m.id] || 0;
@@ -155,7 +155,7 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
       const deduction = Math.round(perDayRate * offCount);
       const finalAmount = basePrice - deduction;
 
-      const { error } = await supabase.from("mess_payments" as any).upsert({
+      const { error } = await supabase.from("mess_payments").upsert({
         member_id: m.id,
         month: selectedMonth,
         base_amount: basePrice,
@@ -174,7 +174,7 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
 
   const markPaid = async () => {
     if (!markingId) return;
-    await supabase.from("mess_payments" as any).update({
+    await supabase.from("mess_payments").update({
       status: "paid",
       payment_date: paymentDate,
       payment_method: paymentMethod,

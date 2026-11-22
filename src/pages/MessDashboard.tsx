@@ -32,33 +32,33 @@ const MessDashboard = () => {
 
     // 1. Members
     const { data: members } = await supabase
-      .from("mess_members" as any)
+      .from("mess_members")
       .select("id, status")
       .eq("owner_id", effectiveOwnerId!);
 
-    const activeCount = members?.filter((m: any) => m.status === "active").length || 0;
+    const activeCount = members?.filter((m) => m.status === "active").length || 0;
 
     // 2. Revenue (Members)
     const { data: payments } = await supabase
-      .from("mess_payments" as any)
+      .from("mess_payments")
       .select("final_amount")
       .eq("month", monthStr)
       .eq("status", "paid");
 
-    const memberRevenue = (payments as any[])?.reduce((sum, p) => sum + Number(p.final_amount), 0) || 0;
+    const memberRevenue = payments?.reduce((sum, p) => sum + Number(p.final_amount), 0) || 0;
 
     // 3. Revenue (One-time) - Safe catch if table doesn't exist yet
     let guestRevenue = 0;
     let guestCount = 0;
     try {
       const { data: guests } = await supabase
-        .from("mess_one_time_meals" as any)
+        .from("mess_one_time_meals")
         .select("amount")
         .eq("owner_id", effectiveOwnerId!)
         .gte("meal_date", format(start, "yyyy-MM-dd"))
         .lte("meal_date", format(end, "yyyy-MM-dd"));
       
-      guestRevenue = (guests as any[])?.reduce((sum, g) => sum + Number(g.amount), 0) || 0;
+      guestRevenue = guests?.reduce((sum, g) => sum + Number(g.amount), 0) || 0;
       guestCount = guests?.length || 0;
     } catch (e) { console.log("Expansion tables missing"); }
 
@@ -66,24 +66,26 @@ const MessDashboard = () => {
     let expensesTotal = 0;
     try {
       const { data: expenses } = await supabase
-        .from("mess_expenses" as any)
+        .from("mess_expenses")
         .select("amount")
         .eq("owner_id", effectiveOwnerId!)
         .gte("expense_date", format(start, "yyyy-MM-dd"))
         .lte("expense_date", format(end, "yyyy-MM-dd"));
       
-      expensesTotal = (expenses as any[])?.reduce((sum, e) => sum + Number(e.amount), 0) || 0;
-    } catch (e) {}
+      expensesTotal = expenses?.reduce((sum, e) => sum + Number(e.amount), 0) || 0;
+    } catch (e) {
+      console.warn("Could not total mess expenses:", e); // the dashboard still loads without them
+    }
 
     // 5. Attendance Rate (Simplified: Present / (Active * DaysInMonth))
     const daysPassed = new Date().getDate();
     const { data: attendance } = await supabase
-      .from("mess_attendance" as any)
+      .from("mess_attendance")
       .select("breakfast, lunch, dinner")
       .gte("attendance_date", format(start, "yyyy-MM-dd"))
       .lte("attendance_date", format(new Date(), "yyyy-MM-dd"));
 
-    const totalCheckins = (attendance as any[])?.reduce((sum, a) => sum + (a.breakfast ? 1 : 0) + (a.lunch ? 1 : 0) + (a.dinner ? 1 : 0), 0) || 0;
+    const totalCheckins = attendance?.reduce((sum, a) => sum + (a.breakfast ? 1 : 0) + (a.lunch ? 1 : 0) + (a.dinner ? 1 : 0), 0) || 0;
     const possibleCheckins = activeCount * daysPassed * 3; // Approx 3 meals/day
     const attendanceRate = possibleCheckins > 0 ? Math.round((totalCheckins / possibleCheckins) * 100) : 0;
 

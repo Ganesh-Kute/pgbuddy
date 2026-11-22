@@ -54,12 +54,12 @@ const MessExpenses = () => {
 
   const fetchExpenses = async () => {
     const { data } = await supabase
-      .from("mess_expenses" as any)
+      .from("mess_expenses")
       .select("*")
       .eq("owner_id", effectiveOwnerId!)
       .order("expense_date", { ascending: false });
 
-    setExpenses((data as any) || []);
+    setExpenses((data ?? []) as MessExpense[]);
     setLoading(false);
   };
 
@@ -69,7 +69,7 @@ const MessExpenses = () => {
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("mess_expenses" as any).insert({
+    const { error } = await supabase.from("mess_expenses").insert({
       owner_id: effectiveOwnerId!,
       title,
       amount: parseFloat(amount),
@@ -93,7 +93,7 @@ const MessExpenses = () => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this expense?")) return;
-    await supabase.from("mess_expenses" as any).delete().eq("id", id);
+    await supabase.from("mess_expenses").delete().eq("id", id);
     toast({ title: "Expense deleted" });
     fetchExpenses();
   };

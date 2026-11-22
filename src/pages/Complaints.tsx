@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { MessageSquare, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +41,11 @@ const Complaints = () => {
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [resolving, setResolving] = useState(false);
 
-  const fetchComplaints = async () => {
+  const fetchComplaints_load = async () => {
+
+    const later = deferSetters<typeof fetchComplaints_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
     const { data } = await supabase
       .from("complaints")
@@ -48,29 +53,29 @@ const Complaints = () => {
       .order("created_at", { ascending: false });
       
     let fetched = data ?? [];
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetched = fetched.filter(c => accessiblePropertyIds.includes(c.property_id));
     }
-    setComplaints(fetched);
+    later((s) => s.setComplaints(fetched));
 
     // Fetch room/bed info for each tenant
     const tenantIds = [...new Set(fetched.map(c => c.tenant_id))];
     if (tenantIds.length > 0) {
       const { data: assignments } = await supabase
         .from("tenant_assignments")
-        .select("tenant_id, rooms(room_number), bed_id" as any)
+        .select("tenant_id, rooms(room_number), bed_id")
         .in("tenant_id", tenantIds)
-        .eq("is_active", true) as any;
+        .eq("is_active", true);
       const map: Record<string, TenantRoomInfo> = {};
       if (assignments) {
         // Fetch bed info for assignments that have bed_id
-        const bedIds = assignments.filter((a: any) => a.bed_id).map((a: any) => a.bed_id);
-        let bedsMap: Record<string, { bed_label: string; sharing_type: string }> = {};
+        const bedIds = assignments.filter((a) => a.bed_id).map((a) => a.bed_id);
+        const bedsMap: Record<string, { bed_label: string; sharing_type: string }> = {};
         if (bedIds.length > 0) {
-          const { data: beds } = await (supabase as any).from("beds").select("id, bed_label, sharing_type").in("id", bedIds);
-          beds?.forEach((b: any) => { bedsMap[b.id] = b; });
+          const { data: beds } = await supabase.from("beds").select("id, bed_label, sharing_type").in("id", bedIds);
+          beds?.forEach((b) => { bedsMap[b.id] = b; });
         }
-        assignments.forEach((a: any) => {
+        assignments.forEach((a) => {
           const bed = a.bed_id ? bedsMap[a.bed_id] : null;
           map[a.tenant_id] = {
             room_number: a.rooms?.room_number ?? "?",
@@ -79,12 +84,18 @@ const Complaints = () => {
           };
         });
       }
-      setTenantRoomMap(map);
+      later((s) => s.setTenantRoomMap(map));
     }
-    setLoading(false);
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchComplaints(); }, [effectiveOwnerId, staffLoading]);
+  const fetchComplaints_setters = { setComplaints, setTenantRoomMap, setLoading };
+
+  const { refresh: fetchComplaints } = usePageData(["Complaints", effectiveOwnerId, isStaff, accessiblePropertyIds.join()], fetchComplaints_load, applyTo(fetchComplaints_setters), !staffLoading);
 
   const resolveComplaint = async (id: string) => {
     if (resolving) return;
@@ -133,7 +144,7 @@ const Complaints = () => {
                     <div>
                       <h3 className="font-semibold">{c.title}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {(c as any).properties?.name}
+                        {c.properties?.name}
                         {tenantRoomMap[c.tenant_id] && (
                           <> · Room {tenantRoomMap[c.tenant_id].room_number}
                             {tenantRoomMap[c.tenant_id].sharing_type && (

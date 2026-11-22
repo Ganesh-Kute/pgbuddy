@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { Zap, Droplets, IndianRupee, CheckCircle, Clock, Upload, QrCode, Building2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +41,11 @@ const TenantUtilityBills = () => {
   const [uploading, setUploading] = useState<string | null>(null);
   const [showPayInfo, setShowPayInfo] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!user) return;
     const [billRes, assignRes] = await Promise.all([
       supabase.from("utility_bills")
@@ -53,7 +58,7 @@ const TenantUtilityBills = () => {
         .eq("is_active", true)
         .maybeSingle(),
     ]);
-    setBills(billRes.data ?? []);
+    later((s) => s.setBills(billRes.data ?? []));
 
     if (assignRes.data) {
       let info = null;
@@ -68,9 +73,9 @@ const TenantUtilityBills = () => {
 
       // Fallback to owner default
       if (!info) {
-        const ownerId = (assignRes.data as any).properties?.owner_id;
+        const ownerId = assignRes.data.properties?.owner_id;
         if (ownerId) {
-          const { data: ownerDefault } = await (supabase as any)
+          const { data: ownerDefault } = await supabase
             .from("payment_info")
             .select("upi_id, bank_name, account_number, ifsc_code, account_holder")
             .is("property_id", null)
@@ -80,12 +85,18 @@ const TenantUtilityBills = () => {
         }
       }
 
-      setPaymentInfo(info as unknown as PaymentInfo | null);
+      later((s) => s.setPaymentInfo(info as unknown as PaymentInfo | null));
     }
-    setLoading(false);
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { fetchData(); }, [user]);
+  const fetchData_setters = { setBills, setPaymentInfo, setLoading };
+
+  const { refresh: fetchData } = usePageData(["TenantUtilityBills"], fetchData_load, applyTo(fetchData_setters), !!user);
 
   const handleUploadProof = async (billId: string, file: File) => {
     if (!user) return;
@@ -103,10 +114,15 @@ const TenantUtilityBills = () => {
 
     const { data: urlData } = supabase.storage.from("payment-proofs").getPublicUrl(path);
 
-    await supabase.from("utility_bills").update({
+    const { error: saveError } = await supabase.from("utility_bills").update({
       proof_url: urlData.publicUrl,
       proof_uploaded_at: new Date().toISOString(),
     }).eq("id", billId);
+    if (saveError) {
+      toast({ title: "Could not submit proof", description: saveError.message, variant: "destructive" });
+      setUploading(null);
+      return;
+    }
 
     toast({ title: "Payment proof uploaded! Owner will review shortly." });
     setUploading(null);
@@ -205,7 +221,7 @@ const TenantUtilityBills = () => {
                       <div>
                         <p className="font-medium capitalize">{b.bill_type} · {b.bill_month}</p>
                         <p className="text-sm text-muted-foreground">
-                          {(b as any).properties?.name} · Room {(b as any).rooms?.room_number}
+                          {b.properties?.name} · Room {b.rooms?.room_number}
                           {b.units_consumed != null && ` · ${b.units_consumed} units @ ₹${b.rate_per_unit}/unit`}
                         </p>
                       </div>

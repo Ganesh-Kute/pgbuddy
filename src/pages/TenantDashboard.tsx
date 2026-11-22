@@ -67,7 +67,7 @@ const TenantDashboard = () => {
       setPendingDues(payRes.data?.reduce((s, p) => s + Number(p.amount), 0) ?? 0);
       setOpenComplaints(complaintRes.count ?? 0);
       setActiveNotice((noticeRes.count ?? 0) > 0);
-      setRecentPayments((recentPayRes.data as any[]) ?? []);
+      setRecentPayments(recentPayRes.data ?? []);
       setRecentComplaints(recentCompRes.data ?? []);
       
       if (assign) {

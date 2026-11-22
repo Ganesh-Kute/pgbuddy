@@ -4,6 +4,7 @@ import { UtensilsCrossed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/i18n/LanguageContext";
 import TenantLayout from "@/components/dashboard/TenantLayout";
@@ -11,7 +12,7 @@ import TenantLayout from "@/components/dashboard/TenantLayout";
 const TenantMealMenu = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
-  const [menus, setMenus] = useState<any[]>([]);
+  const [menus, setMenus] = useState<Tables<"meal_menus">[]>([]);
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [propertyId, setPropertyId] = useState<string | null>(null);
 

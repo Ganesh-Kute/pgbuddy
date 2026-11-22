@@ -38,7 +38,7 @@ const TenantChat = () => {
       .then(({ data }) => {
         if (data) {
           setPropertyId(data.property_id);
-          setPropertyName((data as any).properties?.name || "Community");
+          setPropertyName(data.properties?.name || "Community");
         }
       });
   }, [user]);

@@ -1,10 +1,14 @@
-name: Build Android APK
+name: Build Android Release
 
 on:
   workflow_dispatch:    # Manual trigger from GitHub UI
   push:
     tags:
-      - 'v*'           # Auto-build on version tags like v1.0.0
+      - "v*"            # Auto-build on version tags like v1.0.0
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   build-apk:
@@ -17,37 +21,130 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Build web app
-        run: npm run build
+      - name: Check Supabase secrets are set
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          missing=0
+          [ -n "$VITE_SUPABASE_URL" ] || { echo "::error::Repository secret VITE_SUPABASE_URL is not set"; missing=1; }
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || { echo "::error::Repository secret VITE_SUPABASE_PUBLISHABLE_KEY is not set"; missing=1; }
+          exit $missing
 
-      - name: Setup Java JDK
+      - name: Build web app (native mode)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
+          VITE_IS_WHITE_LABEL: ${{ vars.VITE_IS_WHITE_LABEL }}
+        run: npm run build -- --mode native
+
+      - name: Setup Java JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "21"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The default list includes the legacy "tools" package, which current SDK repositories no
+          # longer ship ("Failed to find package 'tools'"), so the step failed. Gradle fetches the
+          # platform and build-tools it needs itself once the licences are accepted.
+          packages: "platform-tools"
 
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Prepare release signing keystore from secrets
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            ks_path="${{ runner.temp }}/release.keystore"
+            printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$ks_path"
+            echo "ANDROID_KEYSTORE_PATH=$ks_path" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Release signing enabled from repository secrets."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android signing secrets not configured — signed with the debug key: fine for testing, not for the Play Store."
+          fi
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK
+      - name: Build minified Release APKs (ABI splits + universal)
         working-directory: android
-        run: ./gradlew assembleDebug
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
 
-      - name: Upload APK artifact
+      - name: Build Release App Bundle (AAB)
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease -PbuildingBundle=true
+
+      - name: Report APK & AAB sizes vs previous build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          LEGACY_BASELINE_BYTES: "5934522"
+        run: |
+          prev_run_id=$(gh api "repos/$REPO/actions/workflows/build-apk.yml/runs?status=success&per_page=5" \
+            --jq '.workflow_runs[0].id' 2>/dev/null || true)
+          prev_size=""
+          if [ -n "$prev_run_id" ] && [ "$prev_run_id" != "null" ]; then
+            prev_size=$(gh api "repos/$REPO/actions/runs/$prev_run_id/artifacts" \
+              --jq '.artifacts | map(select(.name | test("apk"))) | .[0].size_in_bytes' 2>/dev/null || true)
+          fi
+          {
+            echo "## Android Release Artifact Sizes"
+            echo ""
+            echo "| Artifact | Bytes | MiB | Delta vs Legacy APK (5.66 MiB) | Previous CI Artifact |"
+            echo "|---|---:|---:|---:|---:|"
+            for f in android/app/build/outputs/apk/release/*.apk android/app/build/outputs/bundle/release/*.aab; do
+              [ -f "$f" ] || continue
+              bytes=$(wc -c < "$f")
+              mib=$(awk -v b="$bytes" 'BEGIN { printf "%.2f", b / 1048576 }')
+              delta=$(awk -v b="$bytes" -v l="$LEGACY_BASELINE_BYTES" 'BEGIN { printf "%+.2f MiB (%+.1f%%)", (b - l) / 1048576, ((b - l) * 100.0) / l }')
+              prev_col="n/a"
+              if [ -n "$prev_size" ] && [ "$prev_size" != "null" ]; then
+                prev_col=$(awk -v p="$prev_size" 'BEGIN { printf "%.2f MiB (compressed artifact)", p / 1048576 }')
+              fi
+              printf '| `%s` | %s | %s | %s | %s |\n' "$(basename "$f")" "$bytes" "$mib" "$delta" "$prev_col"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f "${{ runner.temp }}/release.keystore"
+
+      - name: Upload Release APKs
         uses: actions/upload-artifact@v4
         with:
-          name: pg-buddy-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: pg-buddy-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      - name: Upload Release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: pg-buddy-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
           retention-days: 30

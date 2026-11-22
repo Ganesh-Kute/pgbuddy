@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Home, Building2, Users, LogIn, Sparkles } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { Menu, X, Building2, Users, LogIn, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -11,6 +11,7 @@ const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { user, loading } = useAuth();
+  const prefersReduced = useReducedMotion();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -24,14 +25,14 @@ const Navbar = () => {
   ];
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      scrolled 
-        ? "glass border-b border-border/50 shadow-sm" 
-        : "bg-transparent"
-    }`}>
+    <nav
+      className={`fixed top-0 left-0 right-0 z-50 pt-safe transition-all duration-300 ${
+        scrolled ? "glass border-b border-border/50 shadow-sm" : "bg-transparent"
+      }`}
+    >
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to="/" className="flex items-center gap-2.5 min-h-[44px]">
             <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center shadow-md">
               <Building2 className="w-5 h-5 text-primary-foreground" />
             </div>
@@ -53,8 +54,8 @@ const Navbar = () => {
           <div className="hidden md:flex items-center gap-2">
             <LanguageSwitcher />
             <ThemeToggle />
-            {!loading && (
-              user ? (
+            {!loading &&
+              (user ? (
                 <Button size="sm" className="gradient-primary shadow-md hover:shadow-glow transition-all duration-300" asChild>
                   <Link to="/dashboard">Dashboard</Link>
                 </Button>
@@ -70,12 +71,12 @@ const Navbar = () => {
                     <Link to="/auth?mode=signup">Get Started</Link>
                   </Button>
                 </>
-              )
-            )}
+              ))}
           </div>
 
           <button
-            className="md:hidden p-2 rounded-lg hover:bg-muted/50 transition-colors"
+            type="button"
+            className="md:hidden min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-muted/50 transition-colors"
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Toggle menu"
           >
@@ -87,9 +88,9 @@ const Navbar = () => {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
+            initial={prefersReduced ? { opacity: 1 } : { opacity: 0, height: 0 }}
+            animate={prefersReduced ? { opacity: 1 } : { opacity: 1, height: "auto" }}
+            exit={prefersReduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
             className="md:hidden glass border-b border-border/50 overflow-hidden"
           >
             <div className="container mx-auto px-4 py-3 space-y-1">
@@ -97,30 +98,33 @@ const Navbar = () => {
                 <Link
                   key={link.name}
                   to={link.href}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors"
+                  className="flex items-center gap-3 px-3 min-h-[44px] rounded-xl hover:bg-muted/50 transition-colors"
                   onClick={() => setIsOpen(false)}
                 >
                   <link.icon className="w-4 h-4 text-primary" />
                   <span className="font-medium text-sm">{link.name}</span>
                 </Link>
               ))}
+              <div className="flex items-center justify-between px-3 py-1">
+                <LanguageSwitcher />
+                <ThemeToggle />
+              </div>
               <div className="pt-3 border-t border-border/50 flex flex-col gap-2">
-                {!loading && (
-                  user ? (
-                    <Button className="w-full gradient-primary" size="sm" asChild>
+                {!loading &&
+                  (user ? (
+                    <Button className="w-full gradient-primary min-h-[44px]" asChild>
                       <Link to="/dashboard" onClick={() => setIsOpen(false)}>Dashboard</Link>
                     </Button>
                   ) : (
                     <>
-                      <Button variant="outline" className="w-full" size="sm" asChild>
+                      <Button variant="outline" className="w-full min-h-[44px]" asChild>
                         <Link to="/auth" onClick={() => setIsOpen(false)}>Login</Link>
                       </Button>
-                      <Button className="w-full gradient-primary" size="sm" asChild>
+                      <Button className="w-full gradient-primary min-h-[44px]" asChild>
                         <Link to="/auth?mode=signup" onClick={() => setIsOpen(false)}>Get Started</Link>
                       </Button>
                     </>
-                  )
-                )}
+                  ))}
               </div>
             </div>
           </motion.div>

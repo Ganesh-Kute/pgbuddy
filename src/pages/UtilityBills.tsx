@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { Zap, Plus, Droplets, CheckCircle, Clock, Eye, Users, IndianRupee } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +61,11 @@ const UtilityBills = () => {
   const [splitBill, setSplitBill] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
     const [billRes, tenantRes] = await Promise.all([
       supabase.from("utility_bills").select("*, rooms(room_number), properties(name)").order("created_at", { ascending: false }),
@@ -72,17 +77,23 @@ const UtilityBills = () => {
     let fetchedBills = billRes.data ?? [];
     let fetchedTenants = tenantRes.data ?? [];
 
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetchedBills = fetchedBills.filter(b => accessiblePropertyIds.includes(b.property_id));
       fetchedTenants = fetchedTenants.filter(t => accessiblePropertyIds.includes(t.property_id));
     }
 
-    setBills(fetchedBills);
-    setTenants(fetchedTenants as unknown as RoomInfo[]);
-    setLoading(false);
+    later((s) => s.setBills(fetchedBills));
+    later((s) => s.setTenants(fetchedTenants as unknown as RoomInfo[]));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchData(); }, [effectiveOwnerId, staffLoading]);
+  const fetchData_setters = { setBills, setTenants, setLoading };
+
+  const { refresh: fetchData } = usePageData(["UtilityBills", effectiveOwnerId, isStaff, accessiblePropertyIds.join()], fetchData_load, applyTo(fetchData_setters), !staffLoading);
 
   // Group tenants by room for split billing
   const roomGroups = tenants.reduce((acc, t) => {
@@ -178,7 +189,7 @@ const UtilityBills = () => {
                     <SelectContent>
                       {rooms.map(r => (
                         <SelectItem key={`${r.property_id}-${r.room_id}`} value={`${r.property_id}-${r.room_id}`}>
-                          {(r as any).properties?.name} · Room {(r as any).rooms?.room_number} ({r.tenantIds.length} tenant{r.tenantIds.length > 1 ? "s" : ""})
+                          {r.properties?.name} · Room {r.rooms?.room_number} ({r.tenantIds.length} tenant{r.tenantIds.length > 1 ? "s" : ""})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -272,7 +283,7 @@ const UtilityBills = () => {
                       <div>
                         <p className="font-medium capitalize">{b.bill_type} · {b.bill_month}</p>
                         <p className="text-sm text-muted-foreground">
-                          {(b as any).properties?.name} · Room {(b as any).rooms?.room_number}
+                          {b.properties?.name} · Room {b.rooms?.room_number}
                           {b.units_consumed != null && ` · ${b.units_consumed} units`}
                         </p>
                       </div>

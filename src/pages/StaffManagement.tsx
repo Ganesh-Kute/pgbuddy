@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { Users, Plus, Shield, Calculator, Wrench, Trash2, Building2, Globe, Mail, CheckCircle, Clock, XCircle, Zap, Droplet, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -55,7 +57,11 @@ const StaffManagement = () => {
   const [invitePropertyId, setInvitePropertyId] = useState<string>("all");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!user) return;
     const [staffRes, propRes] = await Promise.all([
       supabase
@@ -68,12 +74,18 @@ const StaffManagement = () => {
         .select("id, name")
         .eq("owner_id", user.id),
     ]);
-    setStaff((staffRes.data as unknown as StaffMember[]) ?? []);
-    setProperties(propRes.data ?? []);
-    setLoading(false);
+    later((s) => s.setStaff((staffRes.data as unknown as StaffMember[]) ?? []));
+    later((s) => s.setProperties(propRes.data ?? []));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { fetchData(); }, [user]);
+  const fetchData_setters = { setStaff, setProperties, setLoading };
+
+  const { refresh: fetchData } = usePageData(["StaffManagement"], fetchData_load, applyTo(fetchData_setters), !!user);
 
   const handleInvite = async () => {
     if (!user || !invitePhone.trim()) return;
@@ -90,7 +102,7 @@ const StaffManagement = () => {
       owner_id: user.id,
       staff_user_id: staffUserId,
       invited_phone: invitePhone.trim(),
-      role: inviteRole as any,
+      role: inviteRole as Tables<"staff_members">["role"],
       property_id: invitePropertyId === "all" ? null : invitePropertyId,
       status: staffUserId ? "active" : "pending",
     });
@@ -115,7 +127,7 @@ const StaffManagement = () => {
   };
 
   const handleUpdateRole = async (id: string, role: string) => {
-    await supabase.from("staff_members").update({ role: role as any }).eq("id", id);
+    await supabase.from("staff_members").update({ role: role as Tables<"staff_members">["role"] }).eq("id", id);
     toast({ title: "Role updated" });
     fetchData();
   };

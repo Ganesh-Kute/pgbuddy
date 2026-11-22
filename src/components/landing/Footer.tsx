@@ -32,31 +32,31 @@ const Footer = () => {
   ];
 
   return (
-    <footer className="bg-foreground text-background pt-16 pb-8">
+    <footer className="bg-[#0f0b1f] text-slate-100 border-t border-white/10 pt-16 pb-[calc(2rem+env(safe-area-inset-bottom,0px))]">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
           <div className="lg:col-span-2">
-            <Link to="/" className="flex items-center gap-2.5 mb-5">
+            <Link to="/" className="inline-flex items-center gap-2.5 mb-5 min-h-[44px]">
               <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center">
                 <Building2 className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg font-bold">PG Buddy</span>
+              <span className="text-lg font-bold text-white">PG Buddy</span>
             </Link>
-            <p className="text-background/60 mb-6 max-w-sm text-sm leading-relaxed">
-              India's leading PG management platform. Simplifying property 
+            <p className="text-slate-300/80 mb-6 max-w-sm text-sm leading-relaxed">
+              India's leading PG management platform. Simplifying property
               management for owners and making PG search easy for tenants.
             </p>
-            <div className="space-y-2.5 text-sm text-background/60">
-              <div className="flex items-center gap-3 hover:text-background/80 transition-colors">
-                <Mail className="w-4 h-4" />
+            <div className="space-y-2.5 text-sm text-slate-300/80">
+              <div className="flex items-center gap-3 hover:text-white transition-colors">
+                <Mail className="w-4 h-4 shrink-0" />
                 <span>gkgk7024@gmail.com</span>
               </div>
-              <div className="flex items-center gap-3 hover:text-background/80 transition-colors">
-                <Phone className="w-4 h-4" />
+              <div className="flex items-center gap-3 hover:text-white transition-colors">
+                <Phone className="w-4 h-4 shrink-0" />
                 <span>8108813284</span>
               </div>
-              <div className="flex items-center gap-3 hover:text-background/80 transition-colors">
-                <MapPin className="w-4 h-4" />
+              <div className="flex items-center gap-3 hover:text-white transition-colors">
+                <MapPin className="w-4 h-4 shrink-0" />
                 <span>Pune, Maharashtra, India</span>
               </div>
             </div>
@@ -64,15 +64,15 @@ const Footer = () => {
 
           {Object.entries(footerLinks).map(([key, links]) => (
             <div key={key}>
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-background/80">
+              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-slate-200">
                 {key.charAt(0).toUpperCase() + key.slice(1)}
               </h4>
-              <ul className="space-y-2.5">
+              <ul className="space-y-1">
                 {links.map((link) => (
                   <li key={link.name}>
                     <Link
                       to={link.href}
-                      className="text-sm text-background/50 hover:text-background transition-colors"
+                      className="inline-flex items-center min-h-[44px] sm:min-h-0 py-1.5 text-sm text-slate-300/75 hover:text-white transition-colors"
                     >
                       {link.name}
                     </Link>
@@ -83,19 +83,19 @@ const Footer = () => {
           ))}
         </div>
 
-        <div className="pt-8 border-t border-background/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-xs text-background/40">
+        <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-xs text-slate-400">
             © {new Date().getFullYear()} PG Buddy. All rights reserved.
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {socialLinks.map((social) => (
               <a
                 key={social.label}
                 href={social.href}
                 aria-label={social.label}
-                className="w-9 h-9 rounded-full bg-background/8 flex items-center justify-center hover:bg-background/15 transition-colors"
+                className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
               >
-                <social.icon className="w-4 h-4" />
+                <social.icon className="w-4 h-4 text-slate-100" />
               </a>
             ))}
           </div>
