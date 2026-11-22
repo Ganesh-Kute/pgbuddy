@@ -21,7 +21,16 @@ const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0
 const head = (bytes: Uint8Array) => String.fromCharCode(...bytes.slice(0, 5));
 
 // The standard fonts encode text as WinAnsi (Windows-1252): "…" is the single byte 0x85.
-const winAnsi = new TextDecoder("windows-1252");
+// WinAnsi (windows-1252) by hand: Node 20's TextDecoder("windows-1252") decodes 0x80-0x9F as Latin-1
+// control characters, so "…" (0x85) came back as U+0085 on CI and the ellipsis checks failed there only.
+const WIN_ANSI_HIGH: Record<number, string> = {
+  0x80: "€", 0x82: "‚", 0x83: "ƒ", 0x84: "„", 0x85: "…", 0x86: "†", 0x87: "‡", 0x88: "ˆ", 0x89: "‰", 0x8a: "Š",
+  0x8b: "‹", 0x8c: "Œ", 0x8e: "Ž", 0x91: "‘", 0x92: "’", 0x93: "“", 0x94: "”", 0x95: "•", 0x96: "–", 0x97: "—",
+  0x98: "˜", 0x99: "™", 0x9a: "š", 0x9b: "›", 0x9c: "œ", 0x9e: "ž", 0x9f: "Ÿ",
+};
+const winAnsi = {
+  decode: (bytes: Uint8Array) => Array.from(bytes, (b) => WIN_ANSI_HIGH[b] ?? String.fromCharCode(b)).join(""),
+};
 
 /** Every string drawn on the page: inflate the content streams and decode pdf-lib's <hex> text operands. */
 function drawnText(bytes: Uint8Array): string[] {
