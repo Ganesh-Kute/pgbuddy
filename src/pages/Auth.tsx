@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getAppName, getAppLogo, isWhiteLabel } from "@/lib/branding";
-import { homeFor } from "@/lib/auth-roles";
+import { ACCOUNT_REMOVED_FLAG, homeFor } from "@/lib/auth-roles";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
@@ -32,6 +32,23 @@ const Auth = () => {
       navigate(homeFor(userRole, isStaff) ?? "/dashboard", { replace: true });
     }
   }, [user, userRole, isStaff, authLoading, navigate]);
+
+  // The app signed out a login whose account had been removed: say why, once.
+  useEffect(() => {
+    let removed = false;
+    try {
+      removed = sessionStorage.getItem(ACCOUNT_REMOVED_FLAG) === "1";
+      sessionStorage.removeItem(ACCOUNT_REMOVED_FLAG);
+    } catch {
+      // Storage unavailable: nothing to show.
+    }
+    if (removed) {
+      toast({
+        title: "Please sign in again",
+        description: "This account was removed or changed. Sign in with your number to continue.",
+      });
+    }
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

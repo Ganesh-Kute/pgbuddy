@@ -50,3 +50,39 @@ export function guardDecision({ loading, signedIn, role, isStaff, requiredRole }
   if (!home) return { kind: "no-role" };
   return { kind: "redirect", to: home };
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Logins whose account no longer exists.
+//
+// A phone keeps its session token after the account is deleted (or its session revoked) in Supabase.
+// The token still decodes, so the app looked signed in, but every write failed: picking a role hit
+// the user_roles -> auth.users foreign key and showed "Could not save your choice". Seen in the APK on
+// 2026-11-22 after a test number registered as tenant and staff was deleted from the database.
+
+export type AuthLikeError = {
+  status?: number | null;
+  code?: string | null;
+  message?: string | null;
+} | null | undefined;
+
+const GONE_AUTH_CODES = new Set(["user_not_found", "session_not_found", "refresh_token_not_found", "user_banned"]);
+
+/**
+ * True when the server says this login's account or session is gone, so the only way forward is to
+ * sign in again. False for network errors and outages: those must not sign anyone out.
+ */
+export function isGoneAccountError(err: AuthLikeError): boolean {
+  if (!err) return false;
+  const code = (err.code ?? "").toLowerCase();
+  const message = (err.message ?? "").toLowerCase();
+  if (GONE_AUTH_CODES.has(code)) return true;
+  // Older auth servers send no code, only this message (HTTP 403).
+  if (message.includes("user from sub claim in jwt does not exist")) return true;
+  if (message.includes("session from session_id claim in jwt does not exist")) return true;
+  // Postgres foreign-key violation from a write keyed on auth.uid(): the auth user row is gone.
+  if (code === "23503" && message.includes("user")) return true;
+  return false;
+}
+
+/** Shown once on the sign-in screen after the app signed a removed account out. */
+export const ACCOUNT_REMOVED_FLAG = "pgbuddy.accountRemoved";

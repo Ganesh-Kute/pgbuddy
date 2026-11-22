@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveRole, type UserRole } from "@/lib/auth-roles";
+import { isGoneAccountError, resolveRole, type UserRole } from "@/lib/auth-roles";
+import { AccountGoneError, signOutRemovedAccount } from "@/lib/account-removed";
 
 export type { UserRole } from "@/lib/auth-roles";
 
@@ -32,12 +33,16 @@ export const useAuth = () => useContext(AuthContext);
 
 type Access = { userId: string; role: UserRole; isStaff: boolean };
 
+
 async function loadAccess(user: User): Promise<Access> {
   // Link a pending staff invitation for this account first, so the staff lookup below sees it.
   const { error: claimError } = await supabase.rpc("claim_staff_invitation");
   if (claimError) console.error("claim_staff_invitation failed:", claimError.message);
 
-  const [roles, staff] = await Promise.all([
+  const [check, roles, staff] = await Promise.all([
+    // The saved token is only decoded locally, so a deleted account still looks signed in.
+    // getUser() asks the auth server. It runs alongside the reads below, so startup is not slower.
+    supabase.auth.getUser(),
     // Every row, not .maybeSingle(): a user with two roles used to come back as an error, then as no role.
     supabase.from("user_roles").select("role").eq("user_id", user.id),
     supabase
@@ -47,6 +52,7 @@ async function loadAccess(user: User): Promise<Access> {
       .eq("status", "active")
       .limit(1),
   ]);
+  if (isGoneAccountError(check.error)) throw new AccountGoneError(check.error?.message);
   if (roles.error) console.error("Could not read user_roles:", roles.error.message);
   if (staff.error) console.error("Could not read staff_members:", staff.error.message);
 
@@ -83,6 +89,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const next = await loadAccess(forUser);
       if (ticket === request.current) setAccess(next);
     } catch (err) {
+      if (err instanceof AccountGoneError) {
+        console.warn("Saved login belongs to a removed account; signing out.", err.message);
+        if (ticket === request.current) await signOutRemovedAccount();
+        return;
+      }
       console.error("Unexpected error loading access:", err);
       if (ticket === request.current) setAccess({ userId: forUser.id, role: null, isStaff: false });
     }

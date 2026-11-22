@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { guardDecision, homeFor, resolveRole, type GuardInput } from "@/lib/auth-roles";
+import { guardDecision, homeFor, isGoneAccountError, resolveRole, type GuardInput } from "@/lib/auth-roles";
 
 const base: GuardInput = { loading: false, signedIn: true, role: null, isStaff: false };
 
@@ -71,5 +71,29 @@ describe("guardDecision", () => {
 
   it("renders unrestricted protected pages for any signed-in user", () => {
     expect(guardDecision({ ...base })).toEqual({ kind: "render" });
+  });
+});
+
+describe("isGoneAccountError (login for a deleted account)", () => {
+  it("detects the auth server's user/session-not-found answers", () => {
+    expect(isGoneAccountError({ status: 403, code: "user_not_found", message: "User from sub claim in JWT does not exist" })).toBe(true);
+    expect(isGoneAccountError({ status: 403, code: "session_not_found", message: "Session not found" })).toBe(true);
+    expect(isGoneAccountError({ status: 403, message: "User from sub claim in JWT does not exist" })).toBe(true);
+  });
+
+  it("detects the foreign-key failure seen on the role screen", () => {
+    expect(isGoneAccountError({
+      code: "23503",
+      message: 'insert or update on table "user_roles" violates foreign key constraint "user_roles_user_id_fkey"',
+    })).toBe(true);
+  });
+
+  it("never signs anyone out for network trouble, outages or ordinary errors", () => {
+    expect(isGoneAccountError(null)).toBe(false);
+    expect(isGoneAccountError(undefined)).toBe(false);
+    expect(isGoneAccountError({ status: 0, message: "Failed to fetch" })).toBe(false);
+    expect(isGoneAccountError({ status: 500, message: "Internal Server Error" })).toBe(false);
+    expect(isGoneAccountError({ status: 401, code: "bad_jwt", message: "invalid JWT" })).toBe(false);
+    expect(isGoneAccountError({ code: "42501", message: "permission denied for table user_roles" })).toBe(false);
   });
 });

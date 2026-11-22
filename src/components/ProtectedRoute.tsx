@@ -1,10 +1,11 @@
 import { ReactNode, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { signOutRemovedAccount } from "@/lib/account-removed";
 import { AppLoadingSkeleton } from "@/components/ui/AppLoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { guardDecision, homeFor, type AppRole } from "@/lib/auth-roles";
+import { guardDecision, homeFor, isGoneAccountError, type AppRole } from "@/lib/auth-roles";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -43,7 +44,17 @@ const ChooseRole = () => {
     setError(null);
     const { error: rpcError } = await supabase.rpc("claim_initial_role", { _role: picked });
     if (rpcError) {
-      setError("Could not save your choice. Check your connection and try again.");
+      if (isGoneAccountError(rpcError)) {
+        // The account behind this login was deleted: signing out is the only way forward.
+        await signOutRemovedAccount();
+        return;
+      }
+      const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+      setError(
+        offline
+          ? "You are offline. Connect to the internet and try again."
+          : `Could not save your choice (${rpcError.code || "error"}). Try again, or sign out and sign in again.`,
+      );
       setBusy(null);
       return;
     }
