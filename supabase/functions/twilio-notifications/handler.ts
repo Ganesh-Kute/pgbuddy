@@ -369,7 +369,7 @@ async function sendWhatsAppDocument(
       }),
       signal: controller.signal,
     });
-    let data: { sent?: unknown; success?: unknown } | null = null;
+    let data: { sent?: unknown; success?: unknown; reason?: unknown } | null = null;
     try {
       data = JSON.parse(await resp.text());
     } catch {
@@ -377,7 +377,8 @@ async function sendWhatsAppDocument(
     }
     if (resp.ok && data && (data.sent === true || data.success === true)) return "sent";
     if (resp.status === 404 && data) return "not_on_whatsapp";
-    console.warn(`[WA Document] Rejected with HTTP ${resp.status}`);
+    const reason = data && typeof data.reason === "string" ? `: ${data.reason.slice(0, 200)}` : "";
+    console.warn(`[WA Document] Rejected with HTTP ${resp.status}${reason}`);
     return "failed";
   } catch (err: unknown) {
     console.warn("[WA Document] Error:", err instanceof Error ? err.message : String(err));

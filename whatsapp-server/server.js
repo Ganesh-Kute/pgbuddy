@@ -349,7 +349,9 @@ function createApp({
       return res.json({ sent: true, success: true });
     } catch (err) {
       console.error("❌ Failed to send document:", err.message);
-      return res.status(500).json({ error: "Failed to send document" });
+      // A short reason (no phone number or file content) so the edge function can log why it fell back.
+      const reason = String((err && err.message) || "unknown").replace(/\d{6,}/g, "<number>").slice(0, 200);
+      return res.status(500).json({ error: "Failed to send document", reason });
     }
   });
 
