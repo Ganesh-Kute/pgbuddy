@@ -21,6 +21,7 @@ import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { formatReceiptWhatsAppFeedback, useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { useSubscriptionPlan } from "@/hooks/useSubscriptionPlan";
 import { buildReceipt } from "@/lib/receipt";
+import { StorageFileLink } from "@/components/StorageFileLink";
 
 interface Payment {
   id: string;
@@ -796,7 +797,7 @@ const Payments = () => {
                           <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 border-t border-border">
                             <CheckCircle className="w-3 h-3 text-success" />
                             <span>Payment proof uploaded</span>
-                            <a href={p.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View proof</a>
+                            <StorageFileLink bucket="payment-proofs" stored={p.proof_url} className="text-primary underline">View proof</StorageFileLink>
                           </div>
                         )}
                       </CardContent>
@@ -842,7 +843,7 @@ const Payments = () => {
                           <div className="flex items-center gap-2 text-sm">
                             <CheckCircle className="w-4 h-4 text-success" />
                             <span className="text-muted-foreground">Proof submitted</span>
-                            <a href={p.proof_url!} target="_blank" rel="noopener noreferrer" className="text-primary text-xs underline">View Proof</a>
+                            <StorageFileLink bucket="payment-proofs" stored={p.proof_url} className="text-primary text-xs underline">View Proof</StorageFileLink>
                           </div>
                           {p.transaction_id && (
                             <p className="text-xs text-muted-foreground"><strong>Ref No:</strong> {p.transaction_id}</p>
@@ -909,7 +910,7 @@ const Payments = () => {
                           <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
                             <CheckCircle className="w-3 h-3 text-success" />
                             <span>Payment proof uploaded</span>
-                            <a href={p.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View proof</a>
+                            <StorageFileLink bucket="payment-proofs" stored={p.proof_url} className="text-primary underline">View proof</StorageFileLink>
                           </div>
                         )}
                         {p.approved_by_name && (

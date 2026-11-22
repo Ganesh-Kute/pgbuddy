@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import TenantLayout from "@/components/dashboard/TenantLayout";
 import { supabase } from "@/integrations/supabase/client";
+import { prepareUpload, UploadRejected } from "@/lib/image-compress";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -73,10 +74,23 @@ const TenantDocuments = () => {
     if (!user || !file || !assignment) return;
     setUploading(true);
 
-    const ext = file.name.split(".").pop();
-    const path = `${user.id}/${Date.now()}.${ext}`;
+    let prepared;
+    try {
+      prepared = await prepareUpload(file, "document");
+    } catch (err) {
+      toast({
+        title: "Cannot upload this file",
+        description: err instanceof UploadRejected ? err.message : "Please try another file.",
+        variant: "destructive",
+      });
+      setUploading(false);
+      return;
+    }
+    const path = `${user.id}/${Date.now()}.${prepared.ext}`;
 
-    const { error: uploadErr } = await supabase.storage.from("tenant-documents").upload(path, file);
+    const { error: uploadErr } = await supabase.storage
+      .from("tenant-documents")
+      .upload(path, prepared.body, { contentType: prepared.contentType });
     if (uploadErr) {
       toast({ title: "Upload failed", description: uploadErr.message, variant: "destructive" });
       setUploading(false);

@@ -44,6 +44,10 @@ export type ReceiptModel = {
   propertyName: string;
   propertyAddress: string;
   ownerName: string;
+  /** Owner's phone as stored, tidied; "" when missing. */
+  ownerPhone: string;
+  /** The month paid for: "2026-11" becomes "Nov 2026", other text is kept; "" for a deposit. */
+  period: string;
   roomNumber: string;
   method: string;
   transactionId: string;
@@ -120,6 +124,17 @@ export function amountInWords(value: number): string {
   return `${[rupeeText, paiseText].filter(Boolean).join(" and ")} Only`;
 }
 
+/** "2026-11" or "2026-11-01" -> "Nov 2026"; anything else is returned tidied but unchanged. */
+export function formatPeriod(month: string | null | undefined): string {
+  const v = (month ?? "").replace(/\s+/g, " ").trim();
+  const m = v.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
+  if (m) {
+    const idx = Number(m[2]) - 1;
+    if (idx >= 0 && idx < 12) return `${MONTHS[idx]} ${m[1]}`;
+  }
+  return v;
+}
+
 function clean(value: string | null | undefined, fallback: string): string {
   const v = (value ?? "").replace(/\s+/g, " ").trim();
   return v || fallback;
@@ -139,7 +154,7 @@ export function buildReceipt(payment: ReceiptPaymentInput, party: ReceiptPartyIn
   const total = Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
   const type = (payment.payment_type ?? "rent").toLowerCase();
   const kind: ReceiptModel["kind"] = type === "deposit" ? "deposit" : type === "rent" || !type ? "rent" : "other";
-  const month = clean(payment.month, "");
+  const month = formatPeriod(payment.month);
   const isPaid = (payment.status ?? "").toLowerCase() === "paid";
 
   const label =
@@ -167,6 +182,8 @@ export function buildReceipt(payment: ReceiptPaymentInput, party: ReceiptPartyIn
     propertyName: clean(party.propertyName, "PG"),
     propertyAddress: clean(party.propertyAddress, ""),
     ownerName: clean(party.ownerName, ""),
+    ownerPhone: clean(party.ownerPhone, ""),
+    period: kind === "deposit" ? "" : month,
     roomNumber: clean(party.roomNumber, "-"),
     method: METHOD_LABELS[methodKey] ?? clean(payment.payment_method, "-"),
     transactionId: clean(payment.transaction_id, "-"),

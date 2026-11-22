@@ -8,8 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Separator } from "@/components/ui/separator";
 import TenantLayout from "@/components/dashboard/TenantLayout";
 import { supabase } from "@/integrations/supabase/client";
+import { prepareUpload, UploadRejected } from "@/lib/image-compress";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { StorageFileLink } from "@/components/StorageFileLink";
 
 interface UtilityBill {
   id: string;
@@ -102,10 +104,23 @@ const TenantUtilityBills = () => {
     if (!user) return;
     setUploading(billId);
 
-    const ext = file.name.split(".").pop();
-    const path = `utility/${user.id}/${billId}.${ext}`;
+    let prepared;
+    try {
+      prepared = await prepareUpload(file, "document");
+    } catch (err) {
+      toast({
+        title: "Cannot upload this file",
+        description: err instanceof UploadRejected ? err.message : "Please try another file.",
+        variant: "destructive",
+      });
+      setUploading(null);
+      return;
+    }
+    const path = `utility/${user.id}/${billId}.${prepared.ext}`;
 
-    const { error: uploadErr } = await supabase.storage.from("payment-proofs").upload(path, file, { upsert: true });
+    const { error: uploadErr } = await supabase.storage
+      .from("payment-proofs")
+      .upload(path, prepared.body, { upsert: true, contentType: prepared.contentType });
     if (uploadErr) {
       toast({ title: "Upload failed", description: uploadErr.message, variant: "destructive" });
       setUploading(null);
@@ -241,7 +256,7 @@ const TenantUtilityBills = () => {
                         <div className="flex items-center gap-2 text-sm">
                           <Clock className="w-4 h-4 text-warning" />
                           <span className="text-muted-foreground">Proof uploaded — awaiting owner approval</span>
-                          <a href={b.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary text-xs underline">View</a>
+                          <StorageFileLink bucket="payment-proofs" stored={b.proof_url} className="text-primary text-xs underline">View</StorageFileLink>
                         </div>
                       ) : (
                         <label className="flex items-center gap-2 cursor-pointer">
@@ -271,7 +286,7 @@ const TenantUtilityBills = () => {
                       <CheckCircle className="w-3 h-3 text-success" />
                       <span>Payment verified by owner</span>
                       {b.proof_url && (
-                        <a href={b.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline ml-1">View proof</a>
+                        <StorageFileLink bucket="payment-proofs" stored={b.proof_url} className="text-primary underline ml-1">View proof</StorageFileLink>
                       )}
                     </div>
                   )}

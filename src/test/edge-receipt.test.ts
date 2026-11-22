@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 import * as pdfLib from "pdf-lib";
 import { buildReceipt } from "../../supabase/functions/_shared/receipt-model.ts";
-import { pdfText, renderReceiptPdf, wrapText } from "../../supabase/functions/_shared/receipt-pdf.ts";
+import { clampLines, ellipsize, pdfText, renderReceiptPdf, wrapText } from "../../supabase/functions/_shared/receipt-pdf.ts";
+import { inflateSync } from "node:zlib";
 import { bytesToBase64, RECEIPT_SEND_LOG } from "../../supabase/functions/twilio-notifications/receipt.ts";
 import { createTwilioNotificationsHandler } from "../../supabase/functions/twilio-notifications/handler.ts";
 
@@ -19,16 +20,96 @@ const PAID_B = "33333333-3333-4333-8333-333333333333";
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 const head = (bytes: Uint8Array) => String.fromCharCode(...bytes.slice(0, 5));
 
+// The standard fonts encode text as WinAnsi (Windows-1252): "…" is the single byte 0x85.
+// WinAnsi (windows-1252) by hand: Node 20's TextDecoder("windows-1252") decodes 0x80-0x9F as Latin-1
+// control characters, so "…" (0x85) came back as U+0085 on CI and the ellipsis checks failed there only.
+const WIN_ANSI_HIGH: Record<number, string> = {
+  0x80: "€", 0x82: "‚", 0x83: "ƒ", 0x84: "„", 0x85: "…", 0x86: "†", 0x87: "‡", 0x88: "ˆ", 0x89: "‰", 0x8a: "Š",
+  0x8b: "‹", 0x8c: "Œ", 0x8e: "Ž", 0x91: "‘", 0x92: "’", 0x93: "“", 0x94: "”", 0x95: "•", 0x96: "–", 0x97: "—",
+  0x98: "˜", 0x99: "™", 0x9a: "š", 0x9b: "›", 0x9c: "œ", 0x9e: "ž", 0x9f: "Ÿ",
+};
+const winAnsi = {
+  decode: (bytes: Uint8Array) => Array.from(bytes, (b) => WIN_ANSI_HIGH[b] ?? String.fromCharCode(b)).join(""),
+};
+
+/** Every string drawn on the page: inflate the content streams and decode pdf-lib's <hex> text operands. */
+function drawnText(bytes: Uint8Array): string[] {
+  const raw = Buffer.from(bytes);
+  const out: string[] = [];
+  let at = 0;
+  for (;;) {
+    const start = raw.indexOf("stream", at);
+    if (start < 0) break;
+    const dataStart = start + (raw[start + 6] === 0x0d ? 8 : 7);
+    const end = raw.indexOf("endstream", dataStart);
+    try {
+      const text = inflateSync(raw.subarray(dataStart, end)).toString("latin1");
+      for (const m of text.matchAll(/<([0-9A-Fa-f]+)> Tj/g)) out.push(winAnsi.decode(Buffer.from(m[1], "hex")));
+    } catch {
+      // Not a deflated stream.
+    }
+    at = end + 9;
+  }
+  return out;
+}
+
 describe("receipt PDF", () => {
   const payment = { id: PAID, amount: 8500, month: "2026-11", payment_date: "2026-11-05T06:00:00Z", status: "paid", payment_method: "upi", transaction_id: "T123" };
 
   it("renders a small, valid PDF", async () => {
     const bytes = await renderReceiptPdf(pdfLib, buildReceipt(payment, { tenantName: "Ravi Kumar", propertyName: "Sunrise PG", roomNumber: "104" }));
     expect(head(bytes)).toBe("%PDF-");
-    expect(bytes.length).toBeLessThan(200 * 1024);
+    expect(bytes.length).toBeLessThan(10 * 1024);
     const loaded = await pdfLib.PDFDocument.load(bytes);
     expect(loaded.getPageCount()).toBe(1);
     expect(loaded.getTitle()).toContain("PGB-11111111");
+  });
+
+  it("brands the receipt with the PG and keeps PG Buddy to the footer", async () => {
+    const receipt = buildReceipt(payment, {
+      tenantName: "Ravi Kumar",
+      propertyName: "Sunrise PG",
+      propertyAddress: "12, MG Road, Pune",
+      ownerName: "Sunil Patil",
+      ownerPhone: "+91 98765 43210",
+      roomNumber: "104",
+    });
+    const text = drawnText(await renderReceiptPdf(pdfLib, receipt));
+    expect(text[0]).toBe("PAYMENT RECEIPT");
+    expect(text).toEqual(expect.arrayContaining([
+      "Sunrise PG", "12, MG Road, Pune", "Phone: +91 98765 43210", "PGB-11111111", "Date: 05 Nov 2026",
+      "Ravi Kumar", "Room 104", "UPI", "Txn ID: T123", "Nov 2026", "PAID",
+      "Monthly rent - Nov 2026", "Rs. 8,500.00", "Rupees Eight Thousand Five Hundred Only",
+      "Received by Sunil Patil", "Powered by ", "PG Buddy",
+    ]));
+    // PG Buddy appears only in the footer line, never as the heading.
+    expect(text.filter((t) => t.includes("PG Buddy"))).toEqual(["PG Buddy"]);
+  });
+
+  it("labels a deposit receipt as one", async () => {
+    const receipt = buildReceipt({ ...payment, payment_type: "deposit", month: null }, { propertyName: "Green Leaf", ownerName: "" });
+    const text = drawnText(await renderReceiptPdf(pdfLib, receipt));
+    expect(text).toEqual(expect.arrayContaining(["SECURITY DEPOSIT RECEIPT", "DEPOSIT RECEIVED", "Security deposit", "Green Leaf management"]));
+  });
+
+  it("clamps long names and addresses to two lines and stays fast", async () => {
+    const long = buildReceipt(
+      { ...payment, amount: 1234567.5, transaction_id: "NEFT-HDFC-0000123456789-REF-ABCDEFGHIJ" },
+      {
+        tenantName: "Venkata Subramanian Lakshminarayanan Ramachandran Iyer",
+        propertyName: "Shree Sai Krupa Executive Paying Guest Accommodation for Working Professionals",
+        propertyAddress: "Plot No. 42, Survey No. 118/2B, Behind Old Hanuman Temple, Near Municipal Bus Depot, Karve Nagar, Kothrud, Pune 411052",
+        roomNumber: "Wing C, Floor 3, Room 312 (Window bed)",
+      },
+    );
+    const bytes = await renderReceiptPdf(pdfLib, long);
+    expect(bytes.length).toBeLessThan(10 * 1024);
+    const text = drawnText(bytes);
+    expect(text.filter((t) => t.endsWith("…")).length).toBeGreaterThanOrEqual(3);
+    expect(text.some((t) => t.startsWith("Txn ID: NEFT-HDFC"))).toBe(true);
+    const start = performance.now();
+    for (let i = 0; i < 20; i++) await renderReceiptPdf(pdfLib, long);
+    expect((performance.now() - start) / 20).toBeLessThan(50);
   });
 
   it("does not throw on Devanagari names, emoji or the rupee sign", async () => {
@@ -49,6 +130,20 @@ describe("receipt PDF", () => {
     expect(pdfText("श्री PG", "PG")).toBe("PG");
     expect(pdfText("“Shanti”\tNagar — Pune 🏠")).toBe("“Shanti” Nagar — Pune");
     expect(pdfText("José Müller")).toBe("José Müller");
+  });
+
+  it("ellipsizes and clamps to the width", async () => {
+    const doc = await pdfLib.PDFDocument.create();
+    const font = await doc.embedFont(pdfLib.StandardFonts.Helvetica);
+    expect(ellipsize("short", font, 10, 200)).toBe("short");
+    const cut = ellipsize("Txn ID: NEFT-HDFC-0000123456789-REF-ABCDEFGHIJ", font, 10, 120);
+    expect(cut.startsWith("Txn ID: NEFT")).toBe(true);
+    expect(cut.endsWith("…")).toBe(true);
+    expect(font.widthOfTextAtSize(cut, 10)).toBeLessThanOrEqual(120);
+    const lines = clampLines("one two three four five six seven eight nine ten eleven twelve", font, 10, 60, 2);
+    expect(lines).toHaveLength(2);
+    expect(lines[1].endsWith("…")).toBe(true);
+    for (const l of lines) expect(font.widthOfTextAtSize(l, 10)).toBeLessThanOrEqual(60);
   });
 
   it("wraps long text to the line width", async () => {
@@ -138,7 +233,9 @@ function makeDb(nowMs: () => number) {
 
 type Call = { url: string; body: Record<string, unknown> };
 
-function setup(opts: { docStatus?: number; docBody?: string } = {}) {
+type CloudReply = { status: number; body: unknown };
+
+function setup(opts: { docStatus?: number; docBody?: string; cloud?: { media?: CloudReply; messages?: CloudReply } } = {}) {
   let now = Date.parse("2026-11-22T10:00:00Z");
   const db = makeDb(() => now);
   const calls: Call[] = [];
@@ -156,7 +253,15 @@ function setup(opts: { docStatus?: number; docBody?: string } = {}) {
     })) as never,
     fetchFn: (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
-      calls.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
+      const raw = init?.body;
+      let body: Record<string, unknown> = {};
+      if (raw instanceof FormData) body = Object.fromEntries([...raw.entries()].map(([k, v]) => [k, typeof v === "string" ? v : `<file ${(v as File).name}>`]));
+      else body = JSON.parse(String(raw ?? "{}"));
+      calls.push({ url, body });
+      if (url.startsWith("https://graph.facebook.com/")) {
+        const reply = url.endsWith("/media") ? opts.cloud?.media : opts.cloud?.messages;
+        return new Response(JSON.stringify(reply?.body ?? {}), { status: reply?.status ?? 200 });
+      }
       if (url.endsWith("/api/send-document")) {
         return new Response(opts.docBody ?? JSON.stringify({ sent: true }), { status: opts.docStatus ?? 200 });
       }
@@ -169,6 +274,7 @@ function setup(opts: { docStatus?: number; docBody?: string } = {}) {
       CRON_SECRET: "cron-secret-123456",
       WA_SERVER_URL: "https://wa.pgbuddy.example",
       WA_SERVER_SECRET: "super-strong-wa-secret-999",
+      ...(opts.cloud ? { WHATSAPP_TOKEN: "EAA-test-token", WHATSAPP_PHONE_NUMBER_ID: "1553178531205507" } : {}),
     } as Record<string, string>)[name],
   });
   const call = (user: string | null, body: Record<string, unknown>) =>
@@ -257,7 +363,7 @@ describe("send-payment-receipt", () => {
     const resp = await t.call(TENANT_A, receiptBody(PAID, { mode: "download" }));
     expect(resp.status).toBe(200);
     expect(resp.headers.get("Content-Type")).toBe("application/pdf");
-    expect(resp.headers.get("Content-Disposition")).toBe('attachment; filename="PGB-11111111-2026-11.pdf"');
+    expect(resp.headers.get("Content-Disposition")).toBe('attachment; filename="PGB-11111111-Nov-2026.pdf"');
     expect(head(new Uint8Array(await resp.arrayBuffer()))).toBe("%PDF-");
     expect(t.calls).toHaveLength(0);
     expect(t.db.tables.audit_logs).toHaveLength(0);
@@ -315,3 +421,51 @@ describe("bytesToBase64", () => {
     expect(bytesToBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
   });
 });
+
+describe("official WhatsApp Cloud API (Meta) first, then the fallbacks", () => {
+  const MEDIA_OK = { status: 200, body: { id: "media-123" } };
+  const SENT = { status: 200, body: { messages: [{ id: "wamid.1" }] } };
+
+  it("sends the receipt as the approved payment_receipt template with the PDF, and skips the WA server", async () => {
+    const t = setup({ cloud: { media: MEDIA_OK, messages: SENT } });
+    const resp = await t.call(OWNER, receiptBody(PAID));
+    expect(await resp.json()).toMatchObject({ sent: true, via: "document" });
+    expect(t.calls.map((c) => c.url)).toEqual([
+      "https://graph.facebook.com/v25.0/1553178531205507/media",
+      "https://graph.facebook.com/v25.0/1553178531205507/messages",
+    ]);
+    expect(t.calls[0].body).toMatchObject({ messaging_product: "whatsapp", type: "application/pdf" });
+    const msg = t.calls[1].body as { to: string; template: { name: string; components: { type: string; parameters: { type: string; text?: string; document?: { id: string; filename: string } }[] }[] } };
+    expect(msg.to).toBe("919876543210");
+    expect(msg.template.name).toBe("payment_receipt");
+    const [header, body] = msg.template.components;
+    expect(header.parameters[0].document?.id).toBe("media-123");
+    expect(header.parameters[0].document?.filename).toMatch(/^PGB-11111111-.+\.pdf$/);
+    expect(body.parameters.map((p) => p.text)).toEqual(["Ravi", "8,500.00", expect.any(String), expect.any(String)]);
+  });
+
+  it("falls back to the WA server while Meta has not approved the template yet", async () => {
+    const t = setup({ cloud: { media: MEDIA_OK, messages: { status: 400, body: { error: { code: 132001, message: "Template name does not exist in the translation" } } } } });
+    const resp = await t.call(OWNER, receiptBody(PAID));
+    expect(await resp.json()).toMatchObject({ sent: true, via: "document" });
+    expect(t.calls.map((c) => c.url).at(-1)).toBe("https://wa.pgbuddy.example/api/send-document");
+  });
+
+  it("stops at 'not on WhatsApp' instead of trying other routes", async () => {
+    const t = setup({ cloud: { media: MEDIA_OK, messages: { status: 400, body: { error: { code: 131026, message: "Message undeliverable" } } } } });
+    const resp = await t.call(OWNER, receiptBody(PAID));
+    expect(await resp.json()).toMatchObject({ sent: false, reason: "not_on_whatsapp" });
+    expect(t.calls.some((c) => c.url.includes("wa.pgbuddy.example"))).toBe(false);
+  });
+
+  it("sends rent reminders through the rent_reminder template", async () => {
+    const t = setup({ cloud: { messages: SENT } });
+    const resp = await t.call(OWNER, { action: "send-rent-reminder", tenant_ids: [TENANT_A], amount: 8500, month: "2026-12", property_name: "Sunrise PG", due_date: "5 Dec 2026" });
+    expect(await resp.json()).toMatchObject({ sent: 1 });
+    const msg = t.calls.find((c) => c.url.endsWith("/messages"))?.body as { template: { name: string; components: { parameters: { text: string }[] }[] } };
+    expect(msg.template.name).toBe("rent_reminder");
+    expect(msg.template.components[0].parameters.map((p) => p.text)).toEqual([expect.any(String), "8,500.00", "Dec 2026", "Sunrise PG", "5 Dec 2026"]);
+    expect(t.calls.some((c) => c.url.includes("wa.pgbuddy.example"))).toBe(false);
+  });
+});
+
