@@ -44,7 +44,10 @@ export interface ReceiptDeps {
   callerId: string | null;
   pdfLib: PdfLib;
   /** Send the PDF as a WhatsApp document. phone10 is a 10-digit Indian number. */
-  sendDocument(phone10: string, doc: { base64: string; filename: string; caption: string }): Promise<DocumentSendResult>;
+  sendDocument(
+    phone10: string,
+    doc: { base64: string; filename: string; caption: string; bytes: Uint8Array; receipt: ReceiptModel },
+  ): Promise<DocumentSendResult>;
   /** Today's text message with a link, the fallback when the document cannot be sent. */
   sendLink(phone10: string, receipt: ReceiptModel, url: string): Promise<boolean>;
   /** Where the public receipt page lives, e.g. https://pgbuddy-zeta-rust.vercel.app */
@@ -227,6 +230,8 @@ export async function handlePaymentReceipt(payload: { payment_id?: unknown; mode
     base64: bytesToBase64(pdf),
     filename: receipt.fileName,
     caption: receiptCaption(receipt),
+    bytes: pdf,
+    receipt,
   });
   if (docResult === "sent") via = "document";
   else if (docResult === "not_on_whatsapp") return json({ sent: false, via: null, reason: "not_on_whatsapp" });

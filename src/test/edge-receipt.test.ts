@@ -224,7 +224,9 @@ function makeDb(nowMs: () => number) {
 
 type Call = { url: string; body: Record<string, unknown> };
 
-function setup(opts: { docStatus?: number; docBody?: string } = {}) {
+type CloudReply = { status: number; body: unknown };
+
+function setup(opts: { docStatus?: number; docBody?: string; cloud?: { media?: CloudReply; messages?: CloudReply } } = {}) {
   let now = Date.parse("2026-11-22T10:00:00Z");
   const db = makeDb(() => now);
   const calls: Call[] = [];
@@ -242,7 +244,15 @@ function setup(opts: { docStatus?: number; docBody?: string } = {}) {
     })) as never,
     fetchFn: (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
-      calls.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
+      const raw = init?.body;
+      let body: Record<string, unknown> = {};
+      if (raw instanceof FormData) body = Object.fromEntries([...raw.entries()].map(([k, v]) => [k, typeof v === "string" ? v : `<file ${(v as File).name}>`]));
+      else body = JSON.parse(String(raw ?? "{}"));
+      calls.push({ url, body });
+      if (url.startsWith("https://graph.facebook.com/")) {
+        const reply = url.endsWith("/media") ? opts.cloud?.media : opts.cloud?.messages;
+        return new Response(JSON.stringify(reply?.body ?? {}), { status: reply?.status ?? 200 });
+      }
       if (url.endsWith("/api/send-document")) {
         return new Response(opts.docBody ?? JSON.stringify({ sent: true }), { status: opts.docStatus ?? 200 });
       }
@@ -255,6 +265,7 @@ function setup(opts: { docStatus?: number; docBody?: string } = {}) {
       CRON_SECRET: "cron-secret-123456",
       WA_SERVER_URL: "https://wa.pgbuddy.example",
       WA_SERVER_SECRET: "super-strong-wa-secret-999",
+      ...(opts.cloud ? { WHATSAPP_TOKEN: "EAA-test-token", WHATSAPP_PHONE_NUMBER_ID: "1553178531205507" } : {}),
     } as Record<string, string>)[name],
   });
   const call = (user: string | null, body: Record<string, unknown>) =>
@@ -401,3 +412,51 @@ describe("bytesToBase64", () => {
     expect(bytesToBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
   });
 });
+
+describe("official WhatsApp Cloud API (Meta) first, then the fallbacks", () => {
+  const MEDIA_OK = { status: 200, body: { id: "media-123" } };
+  const SENT = { status: 200, body: { messages: [{ id: "wamid.1" }] } };
+
+  it("sends the receipt as the approved payment_receipt template with the PDF, and skips the WA server", async () => {
+    const t = setup({ cloud: { media: MEDIA_OK, messages: SENT } });
+    const resp = await t.call(OWNER, receiptBody(PAID));
+    expect(await resp.json()).toMatchObject({ sent: true, via: "document" });
+    expect(t.calls.map((c) => c.url)).toEqual([
+      "https://graph.facebook.com/v25.0/1553178531205507/media",
+      "https://graph.facebook.com/v25.0/1553178531205507/messages",
+    ]);
+    expect(t.calls[0].body).toMatchObject({ messaging_product: "whatsapp", type: "application/pdf" });
+    const msg = t.calls[1].body as { to: string; template: { name: string; components: { type: string; parameters: { type: string; text?: string; document?: { id: string; filename: string } }[] }[] } };
+    expect(msg.to).toBe("919876543210");
+    expect(msg.template.name).toBe("payment_receipt");
+    const [header, body] = msg.template.components;
+    expect(header.parameters[0].document?.id).toBe("media-123");
+    expect(header.parameters[0].document?.filename).toMatch(/^PGB-11111111-.+\.pdf$/);
+    expect(body.parameters.map((p) => p.text)).toEqual(["Ravi", "8,500.00", expect.any(String), expect.any(String)]);
+  });
+
+  it("falls back to the WA server while Meta has not approved the template yet", async () => {
+    const t = setup({ cloud: { media: MEDIA_OK, messages: { status: 400, body: { error: { code: 132001, message: "Template name does not exist in the translation" } } } } });
+    const resp = await t.call(OWNER, receiptBody(PAID));
+    expect(await resp.json()).toMatchObject({ sent: true, via: "document" });
+    expect(t.calls.map((c) => c.url).at(-1)).toBe("https://wa.pgbuddy.example/api/send-document");
+  });
+
+  it("stops at 'not on WhatsApp' instead of trying other routes", async () => {
+    const t = setup({ cloud: { media: MEDIA_OK, messages: { status: 400, body: { error: { code: 131026, message: "Message undeliverable" } } } } });
+    const resp = await t.call(OWNER, receiptBody(PAID));
+    expect(await resp.json()).toMatchObject({ sent: false, reason: "not_on_whatsapp" });
+    expect(t.calls.some((c) => c.url.includes("wa.pgbuddy.example"))).toBe(false);
+  });
+
+  it("sends rent reminders through the rent_reminder template", async () => {
+    const t = setup({ cloud: { messages: SENT } });
+    const resp = await t.call(OWNER, { action: "send-rent-reminder", tenant_ids: [TENANT_A], amount: 8500, month: "2026-12", property_name: "Sunrise PG", due_date: "5 Dec 2026" });
+    expect(await resp.json()).toMatchObject({ sent: 1 });
+    const msg = t.calls.find((c) => c.url.endsWith("/messages"))?.body as { template: { name: string; components: { parameters: { text: string }[] }[] } };
+    expect(msg.template.name).toBe("rent_reminder");
+    expect(msg.template.components[0].parameters.map((p) => p.text)).toEqual([expect.any(String), "8,500.00", "Dec 2026", "Sunrise PG", "5 Dec 2026"]);
+    expect(t.calls.some((c) => c.url.includes("wa.pgbuddy.example"))).toBe(false);
+  });
+});
+

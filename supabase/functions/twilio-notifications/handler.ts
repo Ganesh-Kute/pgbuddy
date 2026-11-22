@@ -1,3 +1,5 @@
+import { cloudConfigFromEnv, sendReceiptDocument, sendRentReminder, type CloudConfig } from "../_shared/whatsapp-cloud.ts";
+import { formatIndianNumber, formatPeriod } from "../_shared/receipt-model.ts";
 import {
   ConfigError,
   type EnvGetter,
@@ -68,6 +70,8 @@ export interface TwilioNotificationsDeps {
 }
 
 interface WaProviderConfig {
+  /** Meta's official Cloud API: tried first for templates it has approved. */
+  cloud: CloudConfig | null;
   waServerUrl: string | null;
   waServerSecret: string | null;
   interaktApiKey: string | null;
@@ -75,6 +79,8 @@ interface WaProviderConfig {
 
 interface TwilioPayload {
   action?: unknown;
+  /** Rent reminder: when the rent is due, e.g. "5 Dec 2026". */
+  due_date?: unknown;
   property_id?: unknown;
   tenant_ids?: unknown;
   tenant_phone?: unknown;
@@ -483,13 +489,16 @@ export function createTwilioNotificationsHandler({
       const waServerSecret = waServerUrl ? requireSecretEnv("WA_SERVER_SECRET", getEnv) : null;
       const interaktApiKey = getEnv("INTERAKT_API_KEY")?.trim() || null;
 
-      if (!waServerUrl && !interaktApiKey) {
+      const cloud = cloudConfigFromEnv(getEnv);
+
+      if (!cloud && !waServerUrl && !interaktApiKey) {
         throw new ConfigError(
-          "Server configuration error: set WA_SERVER_URL + WA_SERVER_SECRET or INTERAKT_API_KEY",
+          "Server configuration error: set WHATSAPP_TOKEN + WHATSAPP_PHONE_NUMBER_ID, WA_SERVER_URL + WA_SERVER_SECRET or INTERAKT_API_KEY",
         );
       }
 
       const providerCfg: WaProviderConfig = {
+        cloud,
         waServerUrl,
         waServerSecret,
         interaktApiKey,
@@ -539,7 +548,23 @@ export function createTwilioNotificationsHandler({
           corsHeaders,
           now: nowFn,
           appUrl: getEnv("PUBLIC_APP_URL")?.trim() || "https://pgbuddy-zeta-rust.vercel.app",
-          sendDocument: (phone10, doc) => sendWhatsAppDocument(phone10, doc, providerCfg, fetchFn),
+          sendDocument: async (phone10, doc) => {
+            // Official API first; until Meta approves payment_receipt (or if it is down) the
+            // self-hosted WhatsApp server sends the same PDF.
+            if (providerCfg.cloud) {
+              const r = doc.receipt;
+              const res = await sendReceiptDocument(providerCfg.cloud, phone10, doc.bytes, doc.filename, {
+                tenantName: r.tenantName,
+                amount: formatIndianNumber(r.total),
+                period: r.period || r.lines[0]?.label || r.title,
+                propertyName: r.propertyName,
+              }, fetchFn);
+              if (res.ok) return "sent";
+              if (res.reason === "not_on_whatsapp") return "not_on_whatsapp";
+              console.warn(`[WA Cloud] receipt not sent (${res.reason}): ${res.detail ?? ""}`);
+            }
+            return sendWhatsAppDocument(phone10, doc, providerCfg, fetchFn);
+          },
           sendLink: (phone10, r, url) =>
             sendSingleWhatsApp(
               phone10,
@@ -661,6 +686,33 @@ export function createTwilioNotificationsHandler({
           return jsonResponse({ sent: 0, message: "No recipients found" }, 200, corsHeaders);
         }
 
+        // Official API first, one template message per tenant; whoever it cannot reach (template not
+        // approved yet, number not on WhatsApp, Meta down) goes through the older providers below.
+        let cloudSent = 0;
+        if (providerCfg.cloud) {
+          const dueDate = asStr(payload.due_date).trim() || "the agreed date";
+          const period = formatPeriod(month) || month;
+          const leftover: typeof recipients = [];
+          for (const r of recipients) {
+            const res = await sendRentReminder(providerCfg.cloud, r.phone, {
+              tenantName: r.full_name || "Tenant",
+              amount: formatIndianNumber(Number(amount) || 0),
+              period,
+              propertyName,
+              dueDate,
+            }, fetchFn);
+            if (res.ok) cloudSent++;
+            else {
+              console.warn(`[WA Cloud] rent reminder not sent (${res.reason}): ${res.detail ?? ""}`);
+              leftover.push(r);
+            }
+          }
+          recipients = leftover;
+          if (recipients.length === 0) {
+            return jsonResponse({ sent: cloudSent, total: cloudSent }, 200, corsHeaders);
+          }
+        }
+
         const phonesList = recipients.map((r) => r.phone);
         const paramsList = recipients.map((t) => [
           t.full_name || "Tenant",
@@ -680,7 +732,7 @@ export function createTwilioNotificationsHandler({
           fetchFn,
         );
 
-        return jsonResponse({ sent, total: recipients.length }, 200, corsHeaders);
+        return jsonResponse({ sent: sent + cloudSent, total: recipients.length + cloudSent }, 200, corsHeaders);
       }
 
       if (action === "send-announcement") {
