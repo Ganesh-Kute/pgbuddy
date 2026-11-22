@@ -10,6 +10,8 @@ import {
   requireSecretEnv,
   verifyCronOrServiceAuth,
 } from "../_shared/security.ts";
+import type { PdfLib } from "../_shared/receipt-pdf.ts";
+import { handlePaymentReceipt, type DocumentSendResult, type ReceiptDb } from "./receipt.ts";
 
 interface AuthUser {
   id: string;
@@ -59,6 +61,10 @@ export interface TwilioNotificationsDeps {
   createClient: CreateTwilioClientFn;
   fetchFn?: typeof fetch;
   getEnv?: EnvGetter;
+  /** pdf-lib, for send-payment-receipt. index.ts passes npm:pdf-lib; tests pass the npm package. */
+  pdfLib?: PdfLib;
+  /** The clock, for the receipt send cooldown. Tests pass a fixed one. */
+  nowFn?: () => Date;
 }
 
 interface WaProviderConfig {
@@ -85,6 +91,8 @@ interface TwilioPayload {
   member_phone?: unknown;
   member_name?: unknown;
   mess_name?: unknown;
+  payment_id?: unknown;
+  mode?: unknown;
 }
 
 const OWNER_STAFF_ACTIONS = new Set([
@@ -325,10 +333,136 @@ async function isAssignedTenantForProperty(
   });
 }
 
+/** How long to wait for the WhatsApp server before falling back. Its browser session can hang. */
+const WA_DOCUMENT_TIMEOUT_MS = 15_000;
+
+/**
+ * Send a PDF as a WhatsApp document through the WA server's POST /api/send-document.
+ * "not_on_whatsapp" only for the server's own JSON 404 (the number has no WhatsApp). An older server
+ * without the endpoint answers 404 with an HTML page, and that counts as "failed", so the caller falls
+ * back to the link.
+ */
+async function sendWhatsAppDocument(
+  phone10: string,
+  doc: { base64: string; filename: string; caption: string },
+  cfg: WaProviderConfig,
+  fetchFn: typeof fetch,
+): Promise<DocumentSendResult> {
+  if (!cfg.waServerUrl || !cfg.waServerSecret) return "failed";
+  // A plain controller and timer rather than AbortSignal.timeout, which some runtimes lack.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WA_DOCUMENT_TIMEOUT_MS);
+  try {
+    const resp = await fetchFn(`${cfg.waServerUrl}/api/send-document`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-server-secret": cfg.waServerSecret,
+        "Bypass-Tunnel-Reminder": "true",
+      },
+      body: JSON.stringify({
+        phoneNumber: `91${phone10}`,
+        base64: doc.base64,
+        mimetype: "application/pdf",
+        filename: doc.filename,
+        caption: doc.caption,
+      }),
+      signal: controller.signal,
+    });
+    let data: { sent?: unknown; success?: unknown } | null = null;
+    try {
+      data = JSON.parse(await resp.text());
+    } catch {
+      // A tunnel or proxy page, not the WA server.
+    }
+    if (resp.ok && data && (data.sent === true || data.success === true)) return "sent";
+    if (resp.status === 404 && data) return "not_on_whatsapp";
+    console.warn(`[WA Document] Rejected with HTTP ${resp.status}`);
+    return "failed";
+  } catch (err: unknown) {
+    console.warn("[WA Document] Error:", err instanceof Error ? err.message : String(err));
+    return "failed";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Destination checks for the older actions that still take a phone number from the request.
+// A signed-in owner or staff member may only message their own tenants and mess members. Before this,
+// any account could claim the owner role at signup and send any text to any number.
+
+/** Ids of the properties the caller owns, plus those an active staff membership covers. */
+async function managedPropertyIds(supabase: TwilioSupabaseClient, userId: string): Promise<string[]> {
+  const ids = new Set<string>();
+  const { data: own } = await supabase.from("properties").select("id").eq("owner_id", userId);
+  (own ?? []).forEach((p) => typeof p.id === "string" && ids.add(p.id));
+  const { data: staff } = await supabase
+    .from("staff_members")
+    .select("owner_id, property_id")
+    .eq("staff_user_id", userId)
+    .eq("status", "active");
+  const wholeOwners: string[] = [];
+  for (const s of staff ?? []) {
+    if (typeof s.property_id === "string") ids.add(s.property_id);
+    else if (s.property_id === null && typeof s.owner_id === "string") wholeOwners.push(s.owner_id);
+  }
+  if (wholeOwners.length > 0) {
+    const { data: props } = await supabase.from("properties").select("id").in("owner_id", wholeOwners);
+    (props ?? []).forEach((p) => typeof p.id === "string" && ids.add(p.id));
+  }
+  return [...ids];
+}
+
+/** Tenants (current or past) of these properties: their assignment rows. */
+async function tenantRowsOf(supabase: TwilioSupabaseClient, propertyIds: string[]) {
+  if (propertyIds.length === 0) return [];
+  const { data } = await supabase
+    .from("tenant_assignments")
+    .select("tenant_id, tenant_phone")
+    .in("property_id", propertyIds);
+  return data ?? [];
+}
+
+/** True when the phone is a tenant's, on one of these properties: the assignment's phone or the tenant's profile phone. */
+async function isTenantPhoneOf(supabase: TwilioSupabaseClient, propertyIds: string[], phone: string): Promise<boolean> {
+  const target = normalizeIndianPhone10(phone);
+  if (!target) return false;
+  const rows = await tenantRowsOf(supabase, propertyIds);
+  if (rows.some((r) => typeof r.tenant_phone === "string" && normalizeIndianPhone10(r.tenant_phone) === target)) return true;
+  const tenantIds = rows.map((r) => r.tenant_id).filter((v): v is string => typeof v === "string" && v.length > 0);
+  if (tenantIds.length === 0) return false;
+  const { data: profiles } = await supabase.from("profiles").select("user_id, phone").in("user_id", tenantIds);
+  return (profiles ?? []).some((p) => typeof p.phone === "string" && normalizeIndianPhone10(p.phone) === target);
+}
+
+/** True when every id is a tenant of one of these properties. */
+async function areTenantsOf(supabase: TwilioSupabaseClient, propertyIds: string[], tenantIds: string[]): Promise<boolean> {
+  const known = new Set((await tenantRowsOf(supabase, propertyIds)).map((r) => r.tenant_id));
+  return tenantIds.every((id) => known.has(id));
+}
+
+/** True when the phone belongs to a mess member of the caller, or of the owner the caller is active staff for. */
+async function isMessMemberPhoneOf(supabase: TwilioSupabaseClient, userId: string, phone: string): Promise<boolean> {
+  const target = normalizeIndianPhone10(phone);
+  if (!target) return false;
+  const ownerIds = new Set([userId]);
+  const { data: staff } = await supabase
+    .from("staff_members")
+    .select("owner_id")
+    .eq("staff_user_id", userId)
+    .eq("status", "active");
+  (staff ?? []).forEach((s) => typeof s.owner_id === "string" && ownerIds.add(s.owner_id));
+  const { data: members } = await supabase.from("mess_members").select("phone").in("owner_id", [...ownerIds]);
+  return (members ?? []).some((m) => typeof m.phone === "string" && normalizeIndianPhone10(m.phone) === target);
+}
+
 export function createTwilioNotificationsHandler({
   createClient,
   fetchFn = fetch,
   getEnv = defaultGetEnv,
+  pdfLib,
+  nowFn,
 }: TwilioNotificationsDeps) {
   return async (req: Request): Promise<Response> => {
     const { corsHeaders, response: corsResp } = handleCorsAndOrigin(req, ["x-cron-secret"], getEnv);
@@ -392,10 +526,34 @@ export function createTwilioNotificationsHandler({
       }
 
       const action = typeof payload.action === "string" ? payload.action.trim() : "";
+
+      if (action === "send-payment-receipt") {
+        // Its own authorisation: the caller is checked against the payment, not a property_id from the body.
+        if (!pdfLib) throw new ConfigError("Server configuration error: pdf-lib is not loaded");
+        const db = createClient(supabaseUrl, serviceRoleKey) as unknown as ReceiptDb;
+        return await handlePaymentReceipt(payload, {
+          db,
+          callerId: isServiceCaller ? null : authUser?.id ?? null,
+          pdfLib,
+          corsHeaders,
+          now: nowFn,
+          appUrl: getEnv("PUBLIC_APP_URL")?.trim() || "https://pgbuddy-zeta-rust.vercel.app",
+          sendDocument: (phone10, doc) => sendWhatsAppDocument(phone10, doc, providerCfg, fetchFn),
+          sendLink: (phone10, r, url) =>
+            sendSingleWhatsApp(
+              phone10,
+              "payment_received",
+              [r.tenantName, r.totalText, r.lines[0]?.label ?? r.title, r.propertyName, r.roomNumber, url],
+              `💰 *Payment Received*\n\nHi ${r.tenantName},\nWe have received your payment of ${r.totalText} (${r.lines[0]?.label ?? r.title}).\nReceipt no. ${r.receiptNo}.\n\nView receipt: ${url}\n\n_PG Buddy App_`,
+              providerCfg,
+              fetchFn,
+            ),
+        });
+      }
       if (!OWNER_STAFF_ACTIONS.has(action) && !TENANT_OR_STAFF_ACTIONS.has(action)) {
         return jsonResponse(
           {
-            error: `Unknown action: ${action || "(missing)"}. Supported: send-rent-reminder, send-announcement, send-complaint-alert, send-vacancy-alert, send-payment-approval, send-payment-received, send-mess-reminder, send-welcome-message`,
+            error: `Unknown action: ${action || "(missing)"}. Supported: send-payment-receipt, send-rent-reminder, send-announcement, send-complaint-alert, send-vacancy-alert, send-payment-approval, send-payment-received, send-mess-reminder, send-welcome-message`,
           },
           400,
           corsHeaders,
@@ -445,6 +603,27 @@ export function createTwilioNotificationsHandler({
             const tenantAllowed = await isAssignedTenantForProperty(supabase, authUser, propertyId);
             if (!tenantAllowed) {
               return jsonResponse({ error: "Forbidden: not assigned to this property" }, 403, corsHeaders);
+            }
+          }
+        }
+
+        // Owner actions that take recipients from the request: only the caller's own tenants or members.
+        if (OWNER_STAFF_ACTIONS.has(action) && action !== "send-announcement") {
+          const scope = () => (propertyId ? Promise.resolve([propertyId]) : managedPropertyIds(supabase, authUser.id));
+          const notYours = () =>
+            jsonResponse({ error: "Forbidden: you can only message your own tenants" }, 403, corsHeaders);
+          if (action === "send-mess-reminder") {
+            const memberPhone = asStr(payload.member_phone).trim();
+            if (memberPhone && !(await isMessMemberPhoneOf(supabase, authUser.id, memberPhone))) return notYours();
+          } else {
+            const tenantPhone = asStr(payload.tenant_phone).trim();
+            const tenantIds = Array.isArray(payload.tenant_ids)
+              ? payload.tenant_ids.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+              : [];
+            if (tenantPhone) {
+              if (!(await isTenantPhoneOf(supabase, await scope(), tenantPhone))) return notYours();
+            } else if (action === "send-rent-reminder" && tenantIds.length > 0) {
+              if (!(await areTenantsOf(supabase, await scope(), tenantIds))) return notYours();
             }
           }
         }

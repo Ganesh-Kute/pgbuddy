@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
+import { Capacitor } from "@capacitor/core";
 import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { CreditCard, IndianRupee, CheckCircle, Clock, AlertTriangle, Plus, MessageCircle, FileText, History, Send } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,14 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import RentReceipt from "@/components/RentReceipt";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscriptionGuard } from "@/hooks/useSubscriptionGuard";
 import OverLimitBanner from "@/components/OverLimitBanner";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
-import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
+import { formatReceiptWhatsAppFeedback, useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { useSubscriptionPlan } from "@/hooks/useSubscriptionPlan";
+import { buildReceipt } from "@/lib/receipt";
 
 interface Payment {
   id: string;
@@ -25,8 +28,9 @@ interface Payment {
   tenant_email?: string | null;
   amount: number;
   month: string;
-  status: string;
   payment_date: string | null;
+  created_at?: string | null;
+  status: string;
   payment_type?: string;
   payment_method?: string | null;
   transaction_id?: string | null;
@@ -38,7 +42,7 @@ interface Payment {
   property_id: string;
   room_id: string;
   rooms?: { room_number: string };
-  properties?: { name: string };
+  properties?: { name: string; address?: string };
   tenant_name?: string | null;
 }
 
@@ -58,7 +62,7 @@ interface ActiveAssignment {
 const Payments = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { send: sendWhatsApp, loading: isSendingWA } = useWhatsAppNotify();
+  const { send: sendWhatsApp, downloadReceiptPdf } = useWhatsAppNotify();
   const { canUseWhatsApp } = useSubscriptionPlan();
   const { isReadOnly, isOverLimit, bedCount, bedLimit, limits } = useSubscriptionGuard();
   const { effectiveOwnerId, isStaff, accessiblePropertyIds, loading: staffLoading } = useStaffAccess();
@@ -79,8 +83,11 @@ const Payments = () => {
   const [paymentMethod, setPaymentMethod] = useState("upi");
   const [referenceNumber, setReferenceNumber] = useState("");
 
-  // Action loading (approve/reject)
+  // Action loading (approve/reject & per-row WA/PDF receipt actions)
   const [actionLoading, setActionLoading] = useState(false);
+  const [sendingReceiptId, setSendingReceiptId] = useState<string | null>(null);
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
 
   const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
   const [selectedPropertyFilter, setSelectedPropertyFilter] = useState<string>("all");
@@ -131,7 +138,7 @@ const Payments = () => {
 
     // 2. Fetch payments and assignments scoped by property IDs
     const [payRes, assignRes] = await Promise.all([
-      supabase.from("rent_payments").select("*, rooms(room_number), properties(name)").in("property_id", propIds).order("created_at", { ascending: false }),
+      supabase.from("rent_payments").select("*, rooms(room_number), properties(name, address)").in("property_id", propIds).order("created_at", { ascending: false }),
       supabase.from("tenant_assignments").select("id, tenant_id, tenant_email, tenant_phone, property_id, room_id, custom_rent, rooms(room_number, rent_amount), properties(name)").eq("is_active", true).in("property_id", propIds),
     ]);
 
@@ -372,21 +379,64 @@ const Payments = () => {
     setGenerating(false);
   };
 
-  const sendPaymentWhatsApp = (payment: Payment) => {
-    if (!canUseWhatsApp("send-payment-received")) return;
-    
-    sendWhatsApp("send-payment-received", {
-      tenant_phone: payment.tenant_phone,
-      tenant_name: payment.tenant_name || "Tenant",
-      amount: payment.amount,
-      month: payment.month,
-      property_name: payment.properties?.name || "your PG",
-      room_number: payment.rooms?.room_number || "N/A",
-      receipt_url: window.location.origin.includes('localhost') 
-        ? `https://pgbuddy-zeta-rust.vercel.app/receipt/${payment.id}` 
-        : `${window.location.origin}/receipt/${payment.id}`,
-      property_id: payment.property_id
-    });
+  const sendPaymentWhatsApp = async (paymentId: string) => {
+    if (!canUseWhatsApp("send-payment-receipt")) return;
+    setSendingReceiptId(paymentId);
+    try {
+      const res = await sendWhatsApp("send-payment-receipt", {
+        payment_id: paymentId,
+      });
+      toast(formatReceiptWhatsAppFeedback(res));
+    } finally {
+      setSendingReceiptId((curr) => (curr === paymentId ? null : curr));
+    }
+  };
+
+  const handleDownloadReceiptPdf = async (payment: Payment) => {
+    setDownloadingReceiptId(payment.id);
+    try {
+      const { blob, error } = await downloadReceiptPdf(payment.id);
+      if (error || !blob) {
+        toast({
+          title: "Download failed",
+          description: error || "Could not generate receipt PDF.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const fileName = buildReceipt(
+        {
+          id: payment.id,
+          amount: payment.amount,
+          month: payment.month,
+          payment_date: payment.payment_date,
+          created_at: payment.created_at,
+          status: payment.status,
+          payment_type: payment.payment_type,
+          payment_method: payment.payment_method,
+          transaction_id: payment.transaction_id,
+        },
+        {
+          tenantName: payment.tenant_name,
+          propertyName: payment.properties?.name,
+          propertyAddress: payment.properties?.address,
+          roomNumber: payment.rooms?.room_number,
+        },
+      ).fileName;
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      toast({ title: "Receipt PDF downloaded" });
+    } finally {
+      setDownloadingReceiptId((curr) => (curr === payment.id ? null : curr));
+    }
   };
 
   const markPaid = async (id: string) => {
@@ -398,7 +448,7 @@ const Payments = () => {
     
     if (!error) {
       toast({ title: "Marked as paid" });
-      if (payment) sendPaymentWhatsApp(payment);
+      if (payment) void sendPaymentWhatsApp(payment.id);
       fetchData();
     }
   };
@@ -416,7 +466,7 @@ const Payments = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Payment approved and marked as paid!" });
-      sendPaymentWhatsApp(payment);
+      void sendPaymentWhatsApp(payment.id);
       fetchData();
     }
     setActionLoading(false);
@@ -454,16 +504,8 @@ const Payments = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Payment recorded successfully!" });
-      const payment = payments.find(p => p.id === recordingPaymentId);
-      if (payment) {
-        sendPaymentWhatsApp({
-          ...payment,
-          amount: Number(recordedAmount),
-          payment_method: paymentMethod,
-          status: "paid",
-          id: recordingPaymentId
-        } as Payment);
-      }
+      const recordedId = recordingPaymentId;
+      void sendPaymentWhatsApp(recordedId);
       setRecordPaymentOpen(false);
       fetchData();
     }
@@ -478,20 +520,32 @@ const Payments = () => {
 
   const selectedAssign = assignments.find(a => a.id === selectedAssignment);
 
-  const sendWhatsAppReminder = (payment: Payment) => {
+  const sendWhatsAppReminder = async (payment: Payment) => {
     if (!canUseWhatsApp("send-rent-reminder")) {
       toast({ title: "Plan upgrade required", description: "WhatsApp reminders are available on Pro and Business plans.", variant: "destructive" });
       return;
     }
 
-    sendWhatsApp("send-rent-reminder", {
-      tenant_ids: payment.tenant_id ? [payment.tenant_id] : [],
-      tenant_phone: payment.tenant_phone,
-      property_name: payment.properties?.name || "your PG",
-      room_number: payment.rooms?.room_number || "N/A",
-      amount: payment.amount,
-      month: payment.month,
-    });
+    setSendingReminderId(payment.id);
+    try {
+      const res = await sendWhatsApp("send-rent-reminder", {
+        tenant_ids: payment.tenant_id ? [payment.tenant_id] : [],
+        tenant_phone: payment.tenant_phone,
+        property_name: payment.properties?.name || "your PG",
+        room_number: payment.rooms?.room_number || "N/A",
+        amount: payment.amount,
+        month: payment.month,
+      });
+      if (res && !res.sent) {
+        toast({
+          title: "Could not send reminder",
+          description: res.reason || res.error || "WhatsApp delivery failed.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setSendingReminderId((curr) => (curr === payment.id ? null : curr));
+    }
   };
 
   const filteredPayments = selectedPropertyFilter === "all" 
@@ -533,15 +587,15 @@ const Payments = () => {
         {isOverLimit && (
           <OverLimitBanner bedCount={bedCount} bedLimit={bedLimit} planName={limits.name} />
         )}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Payments</h1>
             <p className="text-muted-foreground">Track and generate rent payments</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             {!isStaff && properties.length > 0 && (
               <Select value={selectedPropertyFilter} onValueChange={setSelectedPropertyFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="All Properties" />
                 </SelectTrigger>
                 <SelectContent>
@@ -558,10 +612,10 @@ const Payments = () => {
                 {properties[0].name}
               </Badge>
             )}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Dialog open={demoOpen} onOpenChange={setDemoOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="gap-2 text-success border-success/30 hover:bg-success/10">
+                  <Button variant="outline" className="gap-2 text-success border-success/30 hover:bg-success/10 min-h-[44px] sm:min-h-0">
                     <Send className="w-4 h-4" /> Send Demo
                   </Button>
                 </DialogTrigger>
@@ -663,17 +717,17 @@ const Payments = () => {
           </Card>
         ) : (
           <Tabs defaultValue="pending" className="w-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="pending" className="flex items-center gap-2">
+            <TabsList className="mb-4 flex-wrap h-auto">
+              <TabsTrigger value="pending" className="flex items-center gap-2 min-h-[44px] sm:min-h-0">
                 Pending <Badge variant="secondary" className="ml-1">{pendingPayments.length}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="approvals" className="flex items-center gap-2">
+              <TabsTrigger value="approvals" className="flex items-center gap-2 min-h-[44px] sm:min-h-0">
                 Approvals <Badge variant="secondary" className="ml-1">{approvalPayments.length}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="paid" className="flex items-center gap-2">
+              <TabsTrigger value="paid" className="flex items-center gap-2 min-h-[44px] sm:min-h-0">
                 Paid <Badge variant="secondary" className="ml-1">{paidPayments.length}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="history" className="flex items-center gap-2">
+              <TabsTrigger value="history" className="flex items-center gap-2 min-h-[44px] sm:min-h-0">
                 <History className="w-3.5 h-3.5" /> History
               </TabsTrigger>
             </TabsList>
@@ -688,12 +742,12 @@ const Payments = () => {
                 <div className="space-y-3">
                   {pendingPayments.map(p => (
                     <Card key={p.id} className="border-warning/30 bg-warning/5">
-                      <CardContent className="py-4 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
+                      <CardContent className="py-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-4 min-w-0">
                             {statusIcon(p.status)}
-                            <div>
-                              <p className="font-medium">
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">
                                 {p.properties?.name} · Room {p.rooms?.room_number}
                                 {p.payment_type === "deposit" && (
                                   <Badge variant="outline" className="ml-2 text-[10px] bg-primary/10 text-primary border-primary/20">Security Deposit</Badge>
@@ -703,8 +757,8 @@ const Payments = () => {
                               <p className="text-xs text-muted-foreground">{p.month}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
+                          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3">
+                            <div className="text-left sm:text-right">
                               <p className="font-bold flex items-center gap-1">
                                 <IndianRupee className="w-3 h-3" />{Number(p.amount).toLocaleString()}
                               </p>
@@ -712,17 +766,27 @@ const Payments = () => {
                                 {p.status}
                               </Badge>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" className="gap-1 text-success border-success hover:bg-success/10" onClick={() => sendWhatsAppReminder(p)} disabled={isSendingWA}>
-                                <MessageCircle className="w-3.5 h-3.5" /> {isSendingWA ? "..." : "WhatsApp"}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1 text-success border-success hover:bg-success/10 min-h-[44px] sm:min-h-0"
+                                onClick={() => sendWhatsAppReminder(p)}
+                                disabled={sendingReminderId === p.id}
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" /> {sendingReminderId === p.id ? "..." : "WhatsApp"}
                               </Button>
-                              <Button size="sm" className="gradient-primary" onClick={() => {
-                                setRecordingPaymentId(p.id);
-                                setRecordedAmount(String(p.amount));
-                                setPaymentMethod("upi");
-                                setReferenceNumber("");
-                                setRecordPaymentOpen(true);
-                              }}>
+                              <Button
+                                size="sm"
+                                className="gradient-primary min-h-[44px] sm:min-h-0"
+                                onClick={() => {
+                                  setRecordingPaymentId(p.id);
+                                  setRecordedAmount(String(p.amount));
+                                  setPaymentMethod("upi");
+                                  setReferenceNumber("");
+                                  setRecordPaymentOpen(true);
+                                }}
+                              >
                                 Record Payment
                               </Button>
                             </div>
@@ -814,7 +878,12 @@ const Payments = () => {
                           <div className="flex items-center gap-4">
                             {statusIcon(p.status)}
                             <div>
-                              <p className="font-medium">{p.properties?.name} · Room {p.rooms?.room_number}</p>
+                              <p className="font-medium">
+                                {p.properties?.name} · Room {p.rooms?.room_number}
+                                {p.payment_type === "deposit" && (
+                                  <Badge variant="outline" className="ml-2 text-[10px] bg-primary/10 text-primary border-primary/20">Security Deposit</Badge>
+                                )}
+                              </p>
                               <p className="text-sm font-medium">{p.tenant_name || p.tenant_email}</p>
                               <p className="text-xs text-muted-foreground">{p.month}</p>
                             </div>
@@ -848,6 +917,25 @@ const Payments = () => {
                             <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/20">Approved by {p.approved_by_name}</Badge>
                           </div>
                         )}
+                        <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-border mt-2">
+                          <RentReceipt
+                            payment={p}
+                            tenantName={p.tenant_name || undefined}
+                            onDownloadPdf={!Capacitor.isNativePlatform() ? () => handleDownloadReceiptPdf(p) : undefined}
+                            downloadingPdf={downloadingReceiptId === p.id}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 min-h-[44px] sm:min-h-0 text-success border-success/40 hover:bg-success/10"
+                            onClick={() => sendPaymentWhatsApp(p.id)}
+                            disabled={sendingReceiptId === p.id}
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            {sendingReceiptId === p.id ? "Sending receipt..." : "Send receipt on WhatsApp"}
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   ))}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { CreditCard, IndianRupee, CheckCircle, Clock, AlertTriangle, Upload, QrCode, Building2, Copy, Download, Smartphone } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { CreditCard, IndianRupee, CheckCircle, Clock, AlertTriangle, Upload, QrCode, Building2, Copy, Download, Smartphone, MessageCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,22 +13,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import RentReceipt from "@/components/RentReceipt";
-import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
+import { formatReceiptWhatsAppFeedback, useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
+import { buildReceipt } from "@/lib/receipt";
 
 interface Payment {
   id: string;
   property_id: string;
   amount: number;
   month: string;
-  status: string;
   payment_date: string | null;
+  created_at?: string | null;
+  status: string;
   payment_type?: string;
   payment_method?: string | null;
   transaction_id?: string | null;
+  tenant_name?: string | null;
   proof_url: string | null;
   proof_uploaded_at: string | null;
   rooms: { room_number: string } | null;
-  properties: { name: string } | null;
+  properties: { name: string; address?: string } | null;
 }
 
 interface PaymentInfo {
@@ -41,12 +45,15 @@ interface PaymentInfo {
 const TenantPayments = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { send: sendWhatsApp } = useWhatsAppNotify();
+  const { send: sendWhatsApp, downloadReceiptPdf } = useWhatsAppNotify();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [receiptBusyId, setReceiptBusyId] = useState<string | null>(null);
   const [showPaymentInfo, setShowPaymentInfo] = useState(false);
+
+  const isNative = Capacitor.isNativePlatform();
 
   // Upload Proof Dialog
   const [proofDialogOpen, setProofDialogOpen] = useState(false);
@@ -60,7 +67,7 @@ const TenantPayments = () => {
       const [payRes, assignRes] = await Promise.all([
         supabase
           .from("rent_payments")
-          .select("*, rooms(room_number), properties(name)")
+          .select("*, rooms(room_number), properties(name, address)")
           .eq("tenant_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
@@ -155,10 +162,71 @@ const TenantPayments = () => {
     // Refresh
     const { data } = await supabase
       .from("rent_payments")
-      .select("*, rooms(room_number), properties(name)")
+      .select("*, rooms(room_number), properties(name, address)")
       .eq("tenant_id", user.id)
       .order("created_at", { ascending: false });
     setPayments((data as unknown as Payment[]) ?? []);
+  };
+
+  const tenantDisplayName =
+    (typeof user?.user_metadata?.full_name === "string" && user.user_metadata.full_name) ||
+    user?.email ||
+    undefined;
+
+  const handleReceiptAction = async (payment: Payment) => {
+    setReceiptBusyId(payment.id);
+    try {
+      if (isNative) {
+        const res = await sendWhatsApp("send-payment-receipt", {
+          payment_id: payment.id,
+          mode: "send",
+        });
+        toast(formatReceiptWhatsAppFeedback(res));
+        return;
+      }
+
+      const { blob, error } = await downloadReceiptPdf(payment.id);
+      if (error || !blob) {
+        toast({
+          title: "Download failed",
+          description: error || "Could not generate receipt PDF.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const fileName = buildReceipt(
+        {
+          id: payment.id,
+          amount: payment.amount,
+          month: payment.month,
+          payment_date: payment.payment_date,
+          created_at: payment.created_at,
+          status: payment.status,
+          payment_type: payment.payment_type,
+          payment_method: payment.payment_method,
+          transaction_id: payment.transaction_id,
+        },
+        {
+          tenantName: payment.tenant_name || tenantDisplayName,
+          propertyName: payment.properties?.name,
+          propertyAddress: payment.properties?.address,
+          roomNumber: payment.rooms?.room_number,
+        },
+      ).fileName;
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      toast({ title: "Receipt PDF downloaded" });
+    } finally {
+      setReceiptBusyId((curr) => (curr === payment.id ? null : curr));
+    }
   };
 
   const statusIcon = (s: string) => {
@@ -198,7 +266,7 @@ const TenantPayments = () => {
   return (
     <TenantLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">My Payments</h1>
             <p className="text-muted-foreground">View rent payments and pay your dues</p>
@@ -206,7 +274,7 @@ const TenantPayments = () => {
           {paymentInfo && (paymentInfo.upi_id || paymentInfo.bank_name) && (
             <Dialog open={showPaymentInfo} onOpenChange={setShowPaymentInfo}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
+                <Button variant="outline" className="gap-2 min-h-[44px] sm:min-h-0">
                   <QrCode className="w-4 h-4" /> Payment Details
                 </Button>
               </DialogTrigger>
@@ -347,16 +415,35 @@ const TenantPayments = () => {
                           {p.transaction_id && <p><strong>Ref No:</strong> {p.transaction_id}</p>}
                         </div>
                       )}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         {p.proof_url && (
-                          <>
+                          <div className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3 text-success" />
                             <span>Proof attached</span>
                             <a href={p.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View</a>
-                          </>
+                          </div>
                         )}
-                        <div className="ml-auto">
-                          <RentReceipt payment={p} />
+                        <div className="ml-auto flex flex-wrap items-center gap-2">
+                          <RentReceipt
+                            payment={p}
+                            tenantName={p.tenant_name || tenantDisplayName}
+                            onDownloadPdf={() => handleReceiptAction(p)}
+                            downloadingPdf={receiptBusyId === p.id}
+                            downloadLabel={isNative ? "Send to my WhatsApp" : "Download receipt PDF"}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 min-h-[44px] sm:min-h-0"
+                            onClick={() => handleReceiptAction(p)}
+                            disabled={receiptBusyId === p.id}
+                          >
+                            {isNative ? <MessageCircle className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+                            {receiptBusyId === p.id
+                              ? (isNative ? "Sending..." : "Downloading...")
+                              : (isNative ? "Send to my WhatsApp" : "Download receipt PDF")}
+                          </Button>
                         </div>
                       </div>
                     </div>

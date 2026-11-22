@@ -9,6 +9,8 @@ const qrcode = require("qrcode-terminal");
 const { createClient } = require("@supabase/supabase-js");
 
 const COMPROMISED_DEFAULT_SECRET = ["pg_buddy", "whatsapp", "secret", "2024"].join("_");
+const MAX_DOCUMENT_BYTES = 1024 * 1024;
+const DOCUMENT_FILENAME_REGEX = /^[\w\- .]{1,80}\.pdf$/;
 
 function validateServerConfig(env = process.env) {
   const secret = typeof env.SERVER_SECRET === "string" ? env.SERVER_SECRET.trim() : "";
@@ -62,6 +64,72 @@ function resolveSafeMediaPath(rawPath, baseDir = __dirname) {
   return resolvedTarget;
 }
 
+function validateDocumentPayload(body) {
+  const { phoneNumber, base64, mimetype, filename, caption } = body || {};
+  if (phoneNumber === undefined || phoneNumber === null || String(phoneNumber).trim() === "") {
+    return { ok: false, status: 400, error: "phoneNumber is required" };
+  }
+
+  let formattedPhone;
+  try {
+    formattedPhone = formatPhone(phoneNumber);
+  } catch (e) {
+    return { ok: false, status: 400, error: e.message };
+  }
+
+  if (typeof mimetype !== "string" || mimetype.trim().toLowerCase() !== "application/pdf") {
+    return { ok: false, status: 400, error: "Only application/pdf documents are allowed" };
+  }
+
+  if (
+    typeof filename !== "string" ||
+    filename.startsWith(".") ||
+    filename.includes("..") ||
+    !DOCUMENT_FILENAME_REGEX.test(filename)
+  ) {
+    return { ok: false, status: 400, error: "Invalid filename: expected 1-80 safe characters ending in .pdf" };
+  }
+
+  if (typeof base64 !== "string" || !base64.trim()) {
+    return { ok: false, status: 400, error: "base64 PDF content is required" };
+  }
+
+  const cleanBase64 = base64.replace(/\s+/g, "");
+  if (cleanBase64.length > Math.ceil((MAX_DOCUMENT_BYTES * 4) / 3) + 4) {
+    return { ok: false, status: 400, error: "PDF exceeds maximum decoded size of 1 MB" };
+  }
+  if (
+    cleanBase64.length % 4 !== 0 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(cleanBase64)
+  ) {
+    return { ok: false, status: 400, error: "Invalid base64 encoding" };
+  }
+
+  const decoded = Buffer.from(cleanBase64, "base64");
+  if (decoded.length === 0 || decoded.length > MAX_DOCUMENT_BYTES) {
+    return { ok: false, status: 400, error: "PDF exceeds maximum decoded size of 1 MB" };
+  }
+  if (decoded.length < 5 || decoded.subarray(0, 5).toString("ascii") !== "%PDF-") {
+    return { ok: false, status: 400, error: "Invalid PDF content: missing %PDF- header" };
+  }
+
+  if (caption !== undefined && caption !== null && typeof caption !== "string") {
+    return { ok: false, status: 400, error: "caption must be a string" };
+  }
+  const cleanCaption = typeof caption === "string" ? caption.trim() : "";
+  if (cleanCaption.length > 4096) {
+    return { ok: false, status: 400, error: "caption exceeds maximum length" };
+  }
+
+  return {
+    ok: true,
+    formattedPhone,
+    cleanBase64,
+    filename,
+    caption: cleanCaption,
+  };
+}
+
 function createOtpLimiter(cooldownMs = 30_000) {
   const lastSent = new Map();
   return {
@@ -110,7 +178,15 @@ function createApp({
   mediaBaseDir = __dirname,
 }) {
   const app = express();
-  app.use(express.json());
+  const defaultJsonParser = express.json();
+  const documentJsonParser = express.json({ limit: "2mb" });
+  app.use((req, res, next) => {
+    const reqPath = req.path || String(req.url || "").split("?")[0];
+    if (req.method === "POST" && reqPath === "/api/send-document") {
+      return documentJsonParser(req, res, next);
+    }
+    return defaultJsonParser(req, res, next);
+  });
 
   const authenticate = createAuthenticateMiddleware(serverSecret);
   const otpLimiter = createOtpLimiter(otpCooldownMs);
@@ -243,6 +319,37 @@ function createApp({
     } catch (err) {
       console.error("❌ Failed to send instant message:", err.message);
       return res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  app.post("/api/send-document", apiRateLimiter, authenticate, async (req, res) => {
+    const checked = validateDocumentPayload(req.body);
+    if (!checked.ok) {
+      return res.status(checked.status).json({ error: checked.error });
+    }
+
+    if (!isReadyFn()) {
+      return res.status(503).json({ error: "WhatsApp client not ready yet" });
+    }
+
+    try {
+      const client = getClient();
+      const isRegistered = await client.isRegisteredUser(checked.formattedPhone);
+      if (!isRegistered) {
+        return res.status(404).json({ error: "Phone number is not registered on WhatsApp" });
+      }
+
+      const media = new MessageMedia("application/pdf", checked.cleanBase64, checked.filename);
+      const sendOptions = checked.caption
+        ? { caption: checked.caption, sendMediaAsDocument: true }
+        : { sendMediaAsDocument: true };
+      await client.sendMessage(checked.formattedPhone, media, sendOptions);
+
+      console.log(`✅ Document (${checked.filename}) sent to ******${checked.formattedPhone.slice(4, 8)}`);
+      return res.json({ sent: true, success: true });
+    } catch (err) {
+      console.error("❌ Failed to send document:", err.message);
+      return res.status(500).json({ error: "Failed to send document" });
     }
   });
 
@@ -398,10 +505,13 @@ if (require.main === module) {
 }
 
 module.exports = {
+  MAX_DOCUMENT_BYTES,
+  DOCUMENT_FILENAME_REGEX,
   validateServerConfig,
   timingSafeEqualStr,
   formatPhone,
   resolveSafeMediaPath,
+  validateDocumentPayload,
   createOtpLimiter,
   createAuthenticateMiddleware,
   createApp,
