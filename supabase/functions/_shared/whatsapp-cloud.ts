@@ -4,6 +4,8 @@
 // "PG-Buddy" WhatsApp Business Account (number +91 95455 54067):
 //   payment_receipt  UTILITY  header DOCUMENT, body {{1}} name, {{2}} amount, {{3}} period, {{4}} PG
 //   rent_reminder    UTILITY  body {{1}} name, {{2}} amount, {{3}} period, {{4}} PG, {{5}} due date
+//   login_otp        AUTHENTICATION  Meta's fixed text "{{1}} is your verification code", 5-minute expiry
+//                    footer, "Copy code" button (approved 2026-11-22, after Business Verification)
 // Until a template is approved Meta refuses the send, and the caller falls back to the next provider.
 //
 // Secrets: WHATSAPP_TOKEN (permanent system-user token), WHATSAPP_PHONE_NUMBER_ID.
@@ -175,6 +177,20 @@ export function sendRentReminder(
     to,
     "rent_reminder",
     [bodyParams([values.tenantName, values.amount, values.period, values.propertyName, values.dueDate])],
+    fetchFn,
+  );
+}
+
+/** The login code with the approved login_otp template; the Copy code button carries the same code. */
+export function sendLoginOtp(cfg: CloudConfig, to: string, code: string, fetchFn: typeof fetch): Promise<CloudSendResult> {
+  return sendTemplate(
+    cfg,
+    to,
+    "login_otp",
+    [
+      { type: "body", parameters: [{ type: "text", text: code }] },
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
+    ],
     fetchFn,
   );
 }
