@@ -1,5 +1,6 @@
 import StaticPageLayout from "./StaticPageLayout";
-import { Mail, Phone, MapPin, Clock } from "lucide-react";
+import { MessageCircle, MapPin, Clock, BadgeCheck } from "lucide-react";
+import { BUSINESS, whatsappLink } from "@/lib/business-info";
 
 const Contact = () => (
   <StaticPageLayout title="Contact Us">
@@ -7,9 +8,9 @@ const Contact = () => (
 
     <div className="grid gap-4 sm:grid-cols-2 mt-4">
       {[
-        { icon: Mail, label: "Email", value: "gkgk7024@gmail.com", href: "mailto:gkgk7024@gmail.com" },
-        { icon: Phone, label: "Phone", value: "8108813284", href: "tel:+918108813284" },
-        { icon: MapPin, label: "Location", value: "Pune, Maharashtra, India" },
+        { icon: MessageCircle, label: "WhatsApp", value: BUSINESS.whatsappDisplay, href: whatsappLink },
+        { icon: MapPin, label: "Location", value: BUSINESS.locality },
+        { icon: BadgeCheck, label: "Registered business", value: `${BUSINESS.legalName} · Udyam ${BUSINESS.udyamNumber.replace(/-/g, "\u2011")}` },
         { icon: Clock, label: "Support Hours", value: "Mon–Sat, 9 AM – 7 PM IST" },
       ].map((item) => (
         <div key={item.label} className="flex items-start gap-3 border border-border rounded-xl p-4">

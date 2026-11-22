@@ -1,4 +1,5 @@
 import StaticPageLayout from "./StaticPageLayout";
+import { BUSINESS, whatsappLink } from "@/lib/business-info";
 
 const AboutUs = () => (
   <StaticPageLayout title="About Us">
@@ -24,6 +25,17 @@ const AboutUs = () => (
 
     <h2 className="text-xl font-semibold text-foreground">Our Team</h2>
     <p>We're a passionate team of developers and entrepreneurs who've lived in PGs ourselves. We understand the pain points firsthand and are committed to building tools that actually solve real problems for PG owners and tenants across India.</p>
+
+    <h2 className="text-xl font-semibold text-foreground">Business Details</h2>
+    <ul className="list-none space-y-1">
+      <li><strong>Registered name:</strong> {BUSINESS.legalName}</li>
+      <li><strong>Udyam Registration No.:</strong> {BUSINESS.udyamNumber} (Ministry of MSME, Government of India)</li>
+      <li><strong>Location:</strong> {BUSINESS.locality}</li>
+      <li>
+        <strong>WhatsApp:</strong>{" "}
+        <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{BUSINESS.whatsappDisplay}</a>
+      </li>
+    </ul>
   </StaticPageLayout>
 );
 

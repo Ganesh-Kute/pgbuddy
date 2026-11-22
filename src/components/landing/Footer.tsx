@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Building2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Linkedin } from "lucide-react";
+import { Building2, MessageCircle, MapPin, BadgeCheck, Facebook, Twitter, Instagram, Linkedin } from "lucide-react";
+import { BUSINESS, whatsappLink } from "@/lib/business-info";
 
 const Footer = () => {
   const footerLinks = {
@@ -47,17 +48,26 @@ const Footer = () => {
               management for owners and making PG search easy for tenants.
             </p>
             <div className="space-y-2.5 text-sm text-slate-300/80">
-              <div className="flex items-center gap-3 hover:text-white transition-colors">
-                <Mail className="w-4 h-4 shrink-0" />
-                <span>gkgk7024@gmail.com</span>
-              </div>
-              <div className="flex items-center gap-3 hover:text-white transition-colors">
-                <Phone className="w-4 h-4 shrink-0" />
-                <span>8108813284</span>
-              </div>
-              <div className="flex items-center gap-3 hover:text-white transition-colors">
+              <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 min-h-[44px] sm:min-h-0 hover:text-white transition-colors"
+              >
+                <MessageCircle className="w-4 h-4 shrink-0" />
+                <span>WhatsApp {BUSINESS.whatsappDisplay}</span>
+              </a>
+              <div className="flex items-center gap-3">
                 <MapPin className="w-4 h-4 shrink-0" />
-                <span>Pune, Maharashtra, India</span>
+                <span>{BUSINESS.locality}</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <BadgeCheck className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  {BUSINESS.legalName} · MSME (Udyam) registered
+                  <br />
+                  Udyam Registration No. {BUSINESS.udyamNumber}
+                </span>
               </div>
             </div>
           </div>
@@ -85,7 +95,7 @@ const Footer = () => {
 
         <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-slate-400">
-            © {new Date().getFullYear()} PG Buddy. All rights reserved.
+            © {new Date().getFullYear()} {BUSINESS.legalName}. All rights reserved.
           </p>
           <div className="flex items-center gap-2">
             {socialLinks.map((social) => (
