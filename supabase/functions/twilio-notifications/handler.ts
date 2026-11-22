@@ -484,6 +484,8 @@ export function createTwilioNotificationsHandler({
       const anonKey = requireEnv("SUPABASE_ANON_KEY", getEnv);
       const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY", getEnv);
 
+      // The public website, used in WhatsApp links (PUBLIC_APP_URL secret, no trailing slash).
+      const appUrl = (getEnv("PUBLIC_APP_URL")?.trim() || "https://pgbuddy-zeta-rust.vercel.app").replace(/\/+$/, "");
       const waServerUrlRaw = getEnv("WA_SERVER_URL")?.trim() || null;
       const waServerUrl = waServerUrlRaw ? waServerUrlRaw.replace(/\/+$/, "") : null;
       const waServerSecret = waServerUrl ? requireSecretEnv("WA_SERVER_SECRET", getEnv) : null;
@@ -547,7 +549,7 @@ export function createTwilioNotificationsHandler({
           pdfLib,
           corsHeaders,
           now: nowFn,
-          appUrl: getEnv("PUBLIC_APP_URL")?.trim() || "https://pgbuddy-zeta-rust.vercel.app",
+          appUrl,
           sendDocument: async (phone10, doc) => {
             // Official API first; until Meta approves payment_receipt (or if it is down) the
             // self-hosted WhatsApp server sends the same PDF.
@@ -805,8 +807,8 @@ export function createTwilioNotificationsHandler({
         const propertyName = asStr(payload.property_name, "PG Buddy");
         const roomNumber = asStr(payload.room_number, "N/A");
 
-        const params = [tenantName, propertyName, roomNumber, "https://pgbuddy-zeta-rust.vercel.app"];
-        const messageText = `👋 *Welcome to ${propertyName}!*\n\n────────────────────\nHi *${tenantName}*,\n\nYou’ve been assigned to:\n🏠 *Property:* ${propertyName}\n🚪 *Room:* ${roomNumber}\n\n📲 Access your dashboard, pay rent, and raise complaints anytime:\nhttps://pgbuddy-zeta-rust.vercel.app\n────────────────────\n_Sent via PG Buddy_`;
+        const params = [tenantName, propertyName, roomNumber, appUrl];
+        const messageText = `👋 *Welcome to ${propertyName}!*\n\n────────────────────\nHi *${tenantName}*,\n\nYou’ve been assigned to:\n🏠 *Property:* ${propertyName}\n🚪 *Room:* ${roomNumber}\n\n📲 Access your dashboard, pay rent, and raise complaints anytime:\n${appUrl}\n────────────────────\n_Sent via PG Buddy_`;
 
         const ok = await sendSingleWhatsApp(
           tenantPhone,
@@ -1064,7 +1066,7 @@ export function createTwilioNotificationsHandler({
         const roomNumber = asStr(payload.room_number, "N/A");
         const receiptUrl = asStr(payload.receipt_url);
 
-        let finalUrl = receiptUrl || "https://pgbuddy-zeta-rust.vercel.app";
+        let finalUrl = receiptUrl || appUrl;
         if (
           finalUrl.includes("localhost") ||
           finalUrl.includes("192.168.") ||
@@ -1073,8 +1075,8 @@ export function createTwilioNotificationsHandler({
         ) {
           const urlParts = finalUrl.split("/receipt/");
           finalUrl = urlParts.length > 1
-            ? `https://pgbuddy-zeta-rust.vercel.app/receipt/${urlParts[1]}`
-            : "https://pgbuddy-zeta-rust.vercel.app";
+            ? `${appUrl}/receipt/${urlParts[1]}`
+            : appUrl;
         }
 
         const params = [tenantName, amount, month, propertyName, roomNumber, finalUrl];

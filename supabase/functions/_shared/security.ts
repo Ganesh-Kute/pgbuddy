@@ -42,6 +42,7 @@ export function requireSecretEnv(
 export const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
   "https://pgbuddy.lovable.app",
   "https://pgbuddy-zeta-rust.vercel.app",
+  "https://pgbuddy.getgrm.tech",
   "https://pgbuddy.in",
   "https://www.pgbuddy.in",
   "https://localhost",
