@@ -14,7 +14,9 @@ verify_jwt = true
 [functions.razorpay-webhook]
 verify_jwt = false
 
-# Pre-login Supabase Auth Send SMS Hook: authenticated via SEND_SMS_HOOK_SECRET / CRON_SECRET + rate-limited
+# Pre-login Supabase Auth Send SMS Hook. The version here is the one running in production (v116):
+# it does NOT verify the hook's Standard Webhooks signature yet. Signature checking needs the
+# SEND_SMS_HOOK_SECRET secret, which the project does not have; add it before deploying a version that requires it.
 [functions.send-sms-otp]
 enabled = true
 verify_jwt = false

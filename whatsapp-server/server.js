@@ -7,6 +7,7 @@ const rateLimit = require("express-rate-limit");
 const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const { createClient } = require("@supabase/supabase-js");
+const os = require("os");
 
 const COMPROMISED_DEFAULT_SECRET = ["pg_buddy", "whatsapp", "secret", "2024"].join("_");
 const MAX_DOCUMENT_BYTES = 1024 * 1024;
@@ -19,6 +20,9 @@ function validateServerConfig(env = process.env) {
   }
   if (secret === COMPROMISED_DEFAULT_SECRET) {
     throw new Error("SERVER_SECRET must not use the leaked example placeholder. Set a unique secret.");
+  }
+  if (secret.length < 32) {
+    throw new Error("SERVER_SECRET is too short (needs 32+ characters). Use the same value as WA_SERVER_SECRET in Supabase.");
   }
   const supabaseUrl = typeof env.SUPABASE_URL === "string" ? env.SUPABASE_URL.trim() : "";
   const serviceKey = typeof env.SUPABASE_SERVICE_ROLE_KEY === "string" ? env.SUPABASE_SERVICE_ROLE_KEY.trim() : "";
@@ -386,6 +390,19 @@ function createApp({
   return app;
 }
 
+// Puppeteer's own Chrome is not installed on this Windows PC ("Could not find Chrome"), so use the
+// installed Google Chrome. PUPPETEER_EXECUTABLE_PATH still wins when set.
+function findChromeExecutable(env = process.env) {
+  if (env.PUPPETEER_EXECUTABLE_PATH) return env.PUPPETEER_EXECUTABLE_PATH;
+  if (os.platform() !== "win32") return undefined;
+  const candidates = [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    `${env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+  ];
+  return candidates.find((p) => fs.existsSync(p));
+}
+
 function startServer() {
   let config;
   try {
@@ -398,14 +415,16 @@ function startServer() {
   const supabase = createClient(config.supabaseUrl, config.serviceKey);
   let isReady = false;
 
+  console.log("⏳ Launching Chrome & loading WhatsApp Web (this takes ~15-20s)...");
+
+  // Same client settings as the server that has been running on this PC: installed Chrome,
+  // a desktop user agent, and no remote webVersionCache.
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: "./whatsapp_session" }),
-    webVersionCache: {
-      type: "remote",
-      remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-js/main/dist/wppconnect-wa.js",
-    },
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
     puppeteer: {
       headless: true,
+      executablePath: findChromeExecutable(),
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -463,8 +482,19 @@ function startServer() {
     console.log("🔁 Background worker started (Rent Reminders & App Notifications).");
   }
 
+  client.on("loading_screen", (percent, message) => {
+    console.log(`⏳ Loading WhatsApp: ${percent}% - ${message || "syncing..."}`);
+  });
+
+  client.on("authenticated", () => {
+    console.log("🔑 Session authenticated successfully! Syncing chats...");
+  });
+
   client.on("qr", (qr) => {
-    console.log("\n📱 Scan this QR code with your WhatsApp:\n");
+    console.log("\n=======================================================");
+    console.log("📱 Scan this QR code with your WhatsApp:");
+    console.log("   (WhatsApp on phone -> Linked Devices -> Link a Device)");
+    console.log("=======================================================\n");
     qrcode.generate(qr, { small: true });
   });
 
@@ -482,6 +512,19 @@ function startServer() {
   client.on("disconnected", (reason) => {
     isReady = false;
     console.error("🚨 CRITICAL: WhatsApp disconnected!", reason);
+  });
+
+  // Windows sometimes holds session files open while whatsapp-web.js cleans up (EBUSY).
+  // That must not kill the server that delivers every OTP.
+  process.on("uncaughtException", (err) => {
+    if (err && err.message && err.message.includes("EBUSY")) {
+      console.warn("⚠️ Non-fatal Windows file lock notice (EBUSY):", err.message);
+      return;
+    }
+    console.error("Uncaught Exception:", err);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled Rejection:", reason);
   });
 
   client.initialize();
