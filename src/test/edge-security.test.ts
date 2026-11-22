@@ -5,11 +5,10 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import type http from "node:http";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   COMPROMISED_DEFAULT_WA_SECRET,
-  OtpRateLimiter,
   buildCorsContext,
   hmacSha256Hex,
   isAllowedOrigin,
@@ -23,7 +22,6 @@ import { createCreateSubscriptionHandler } from "../../supabase/functions/create
 import { createVerifySubscriptionHandler } from "../../supabase/functions/verify-subscription-payment/handler.ts";
 import { createPushNotificationsHandler } from "../../supabase/functions/push-notifications/handler.ts";
 import { createRentRemindersHandler, type RentQueryChain } from "../../supabase/functions/rent-reminders/handler.ts";
-import { createSendSmsOtpHandler } from "../../supabase/functions/send-sms-otp/handler.ts";
 import { createTwilioNotificationsHandler } from "../../supabase/functions/twilio-notifications/handler.ts";
 
 const ROOT = path.resolve(__dirname, "../..");
@@ -55,11 +53,24 @@ function getTomlSection(toml: string, sectionHeader: string): string {
   return nextSection === -1 ? rest : rest.slice(0, nextSection);
 }
 
+// send-sms-otp in this repository is the version running in production (v116, deployed 2026-03-28).
+// The hardened rewrite on claude/laughing-planck-fp6j8g was never deployed: it requires a
+// SEND_SMS_HOOK_SECRET the project does not have, so deploying it would stop OTP login.
+// Until a fixed version is deployed, S5 and S8 leave send-sms-otp out, and the KNOWN GAP test below
+// pins its two holes so the exclusion cannot outlive the fix unnoticed.
+const SEND_SMS_OTP_IS_LIVE_V116 = "send-sms-otp";
+
 describe("Track B static & config security invariants", () => {
+  it("KNOWN GAP: live send-sms-otp (v116) still has the leaked fallback secret and wildcard CORS", () => {
+    // When a fixed send-sms-otp lands this test fails on purpose: delete it, delete
+    // SEND_SMS_OTP_IS_LIVE_V116, and add send-sms-otp back to S5's targets.
+    const src = fs.readFileSync(path.join(ROOT, "supabase/functions", SEND_SMS_OTP_IS_LIVE_V116, "index.ts"), "utf8");
+    expect(src).toContain("pg_buddy_whatsapp_secret_2024");
+    expect(src).toMatch(/Access-Control-Allow-Origin["'\s:]+\*/);
+  });
+
   it("S5: no edge function or whatsapp-server file contains the leaked fallback secret", () => {
     const targets = [
-      "supabase/functions/send-sms-otp/index.ts",
-      "supabase/functions/send-sms-otp/handler.ts",
       "supabase/functions/twilio-notifications/index.ts",
       "supabase/functions/twilio-notifications/handler.ts",
       "whatsapp-server/server.js",
@@ -75,7 +86,9 @@ describe("Track B static & config security invariants", () => {
   it("S8: no edge function sets wildcard Access-Control-Allow-Origin: * or uses !== on signatures", () => {
     const fnDirs = fs
       .readdirSync(path.join(ROOT, "supabase/functions"))
-      .filter((d) => !d.startsWith("_") && fs.statSync(path.join(ROOT, "supabase/functions", d)).isDirectory());
+      .filter((d) => !d.startsWith("_") && fs.statSync(path.join(ROOT, "supabase/functions", d)).isDirectory())
+      .filter((d) => d !== SEND_SMS_OTP_IS_LIVE_V116);
+    expect(fnDirs.length).toBeGreaterThanOrEqual(7);
     for (const dir of fnDirs) {
       const files = fs.readdirSync(path.join(ROOT, "supabase/functions", dir)).filter((f) => f.endsWith(".ts"));
       for (const f of files) {
@@ -389,7 +402,7 @@ describe("S8 & payment integrity: razorpay-webhook, create-subscription, verify-
   });
 });
 
-describe("S3: push-notifications, rent-reminders, send-sms-otp, and twilio-notifications", () => {
+describe("S3: push-notifications, rent-reminders, webhook signatures, and twilio-notifications", () => {
   it("push-notifications blocks unauthenticated callers, blocks user JWT on send/other-user subscribe, and allows cron send", async () => {
     const sentPayloads: string[] = [];
     const handler = createPushNotificationsHandler({
@@ -533,93 +546,30 @@ describe("S3: push-notifications, rent-reminders, send-sms-otp, and twilio-notif
     ).toBe(false);
   });
 
-  it("send-sms-otp verifies Standard Webhooks signature, rejects leaked secret, rate-limits, and fails fast on WA error", async () => {
+  // Standard Webhooks check from _shared/security.ts (deployed in every function bundle except
+  // send-sms-otp). The send-sms-otp hardening will need it; no live function calls it yet.
+  it("verifyStandardWebhookSignature accepts a valid v1 signature and rejects unsigned, stale, tampered and wrong-key requests", async () => {
     const rawSecret = "hook-hmac-secret-32-bytes-minimum";
     const whsec = "v1,whsec_" + Buffer.from(rawSecret).toString("base64");
-    const fixedNowMs = 1_700_000_000_000;
-    const nowSec = Math.floor(fixedNowMs / 1000);
-    const limiter = new OtpRateLimiter({ phoneCooldownMs: 30_000, phoneMaxRequests: 5, ipMaxRequests: 20 });
+    const nowSec = 1_700_000_000;
+    const payload = JSON.stringify({ user: { phone: "+919876543210" }, sms: { otp: "654321" } });
 
-    const signHook = (bodyStr: string, tsSec = nowSec) => {
+    const signHook = (bodyStr: string, tsSec = nowSec, key = rawSecret) => {
       const msgId = "msg_123";
-      const sig = crypto
-        .createHmac("sha256", Buffer.from(rawSecret))
-        .update(`${msgId}.${tsSec}.${bodyStr}`)
-        .digest("base64");
-      return {
+      const sig = crypto.createHmac("sha256", Buffer.from(key)).update(`${msgId}.${tsSec}.${bodyStr}`).digest("base64");
+      return new Headers({
         "webhook-id": msgId,
         "webhook-timestamp": String(tsSec),
         "webhook-signature": `v1,${sig}`,
-      };
+      });
     };
+    const check = (body: string, headers: Headers) => verifyStandardWebhookSignature(body, headers, whsec, nowSec);
 
-    const leakedSecretHandler = createSendSmsOtpHandler({
-      getEnv: makeEnv({ WA_SERVER_SECRET: COMPROMISED_DEFAULT_WA_SECRET }),
-      rateLimiter: limiter,
-      nowFn: () => fixedNowMs,
-    });
-    const leakedResp = await leakedSecretHandler(new Request("https://fn.test", { method: "POST", body: "{}" }));
-    expect(leakedResp.status).toBe(500);
-
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const fetchCalls: Array<{ url: string; secret: string | null }> = [];
-    const handler = createSendSmsOtpHandler({
-      getEnv: makeEnv({ SEND_SMS_HOOK_SECRET: whsec }),
-      rateLimiter: limiter,
-      nowFn: () => fixedNowMs,
-      fetchFn: async (input, init) => {
-        fetchCalls.push({
-          url: String(input),
-          secret: (init?.headers as Record<string, string>)?.["x-server-secret"] ?? null,
-        });
-        return new Response(JSON.stringify({ success: true }), { status: 200 });
-      },
-    });
-
-    const payload = JSON.stringify({ user: { phone: "+919876543210" }, sms: { otp: "654321" } });
-
-    const noAuth = await handler(new Request("https://fn.test", { method: "POST", body: payload }));
-    expect(noAuth.status).toBe(401);
-
-    const staleSig = await handler(
-      new Request("https://fn.test", {
-        method: "POST",
-        headers: signHook(payload, nowSec - 600),
-        body: payload,
-      }),
-    );
-    expect(staleSig.status).toBe(401);
-
-    const ok = await handler(
-      new Request("https://fn.test", {
-        method: "POST",
-        headers: { ...signHook(payload), "x-real-ip": "203.0.113.10" },
-        body: payload,
-      }),
-    );
-    expect(ok.status).toBe(200);
-    expect(fetchCalls[0]).toEqual({
-      url: "https://wa.pgbuddy.example/api/send-otp",
-      secret: "super-strong-wa-secret-999",
-    });
-    // Ensure OTP is never logged in plaintext
-    expect(logSpy.mock.calls.flat().join(" ")).not.toContain("654321");
-    logSpy.mockRestore();
-
-    // Immediate second call hits per-phone cooldown 429
-    const limited = await handler(
-      new Request("https://fn.test", {
-        method: "POST",
-        headers: { ...signHook(payload), "x-real-ip": "203.0.113.10" },
-        body: payload,
-      }),
-    );
-    expect(limited.status).toBe(429);
-    expect(limited.headers.get("Retry-After")).toBeTruthy();
-
-    // Verify StandardWebhooks check helper directly
-    const badCheck = await verifyStandardWebhookSignature(payload, new Headers(), whsec, nowSec);
-    expect(badCheck.ok).toBe(false);
+    expect((await check(payload, signHook(payload))).ok).toBe(true);
+    expect((await check(payload, new Headers())).ok).toBe(false);
+    expect((await check(payload, signHook(payload, nowSec - 600))).ok).toBe(false);
+    expect((await check(payload.replace("654321", "000000"), signHook(payload))).ok).toBe(false);
+    expect((await check(payload, signHook(payload, nowSec, "a-different-hook-secret-32-bytes!"))).ok).toBe(false);
   });
 
   it("twilio-notifications blocks unauthenticated callers, blocks tenants from owner actions, and allows owner/assigned tenant", async () => {
