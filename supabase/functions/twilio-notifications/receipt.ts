@@ -181,6 +181,7 @@ export async function handlePaymentReceipt(payload: { payment_id?: unknown; mode
       propertyName: str(property.name) || null,
       propertyAddress: str(property.address) || null,
       ownerName: str(owner?.full_name) || null,
+      ownerPhone: str(owner?.phone) || null,
       roomNumber: str(room?.room_number) || null,
     },
     now(),

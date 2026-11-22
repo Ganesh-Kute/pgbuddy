@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 import * as pdfLib from "pdf-lib";
 import { buildReceipt } from "../../supabase/functions/_shared/receipt-model.ts";
-import { pdfText, renderReceiptPdf, wrapText } from "../../supabase/functions/_shared/receipt-pdf.ts";
+import { clampLines, ellipsize, pdfText, renderReceiptPdf, wrapText } from "../../supabase/functions/_shared/receipt-pdf.ts";
+import { inflateSync } from "node:zlib";
 import { bytesToBase64, RECEIPT_SEND_LOG } from "../../supabase/functions/twilio-notifications/receipt.ts";
 import { createTwilioNotificationsHandler } from "../../supabase/functions/twilio-notifications/handler.ts";
 
@@ -19,16 +20,87 @@ const PAID_B = "33333333-3333-4333-8333-333333333333";
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 const head = (bytes: Uint8Array) => String.fromCharCode(...bytes.slice(0, 5));
 
+// The standard fonts encode text as WinAnsi (Windows-1252): "…" is the single byte 0x85.
+const winAnsi = new TextDecoder("windows-1252");
+
+/** Every string drawn on the page: inflate the content streams and decode pdf-lib's <hex> text operands. */
+function drawnText(bytes: Uint8Array): string[] {
+  const raw = Buffer.from(bytes);
+  const out: string[] = [];
+  let at = 0;
+  for (;;) {
+    const start = raw.indexOf("stream", at);
+    if (start < 0) break;
+    const dataStart = start + (raw[start + 6] === 0x0d ? 8 : 7);
+    const end = raw.indexOf("endstream", dataStart);
+    try {
+      const text = inflateSync(raw.subarray(dataStart, end)).toString("latin1");
+      for (const m of text.matchAll(/<([0-9A-Fa-f]+)> Tj/g)) out.push(winAnsi.decode(Buffer.from(m[1], "hex")));
+    } catch {
+      // Not a deflated stream.
+    }
+    at = end + 9;
+  }
+  return out;
+}
+
 describe("receipt PDF", () => {
   const payment = { id: PAID, amount: 8500, month: "2026-11", payment_date: "2026-11-05T06:00:00Z", status: "paid", payment_method: "upi", transaction_id: "T123" };
 
   it("renders a small, valid PDF", async () => {
     const bytes = await renderReceiptPdf(pdfLib, buildReceipt(payment, { tenantName: "Ravi Kumar", propertyName: "Sunrise PG", roomNumber: "104" }));
     expect(head(bytes)).toBe("%PDF-");
-    expect(bytes.length).toBeLessThan(200 * 1024);
+    expect(bytes.length).toBeLessThan(10 * 1024);
     const loaded = await pdfLib.PDFDocument.load(bytes);
     expect(loaded.getPageCount()).toBe(1);
     expect(loaded.getTitle()).toContain("PGB-11111111");
+  });
+
+  it("brands the receipt with the PG and keeps PG Buddy to the footer", async () => {
+    const receipt = buildReceipt(payment, {
+      tenantName: "Ravi Kumar",
+      propertyName: "Sunrise PG",
+      propertyAddress: "12, MG Road, Pune",
+      ownerName: "Sunil Patil",
+      ownerPhone: "+91 98765 43210",
+      roomNumber: "104",
+    });
+    const text = drawnText(await renderReceiptPdf(pdfLib, receipt));
+    expect(text[0]).toBe("PAYMENT RECEIPT");
+    expect(text).toEqual(expect.arrayContaining([
+      "Sunrise PG", "12, MG Road, Pune", "Phone: +91 98765 43210", "PGB-11111111", "Date: 05 Nov 2026",
+      "Ravi Kumar", "Room 104", "UPI", "Txn ID: T123", "Nov 2026", "PAID",
+      "Monthly rent - Nov 2026", "Rs. 8,500.00", "Rupees Eight Thousand Five Hundred Only",
+      "Received by Sunil Patil", "Powered by ", "PG Buddy",
+    ]));
+    // PG Buddy appears only in the footer line, never as the heading.
+    expect(text.filter((t) => t.includes("PG Buddy"))).toEqual(["PG Buddy"]);
+  });
+
+  it("labels a deposit receipt as one", async () => {
+    const receipt = buildReceipt({ ...payment, payment_type: "deposit", month: null }, { propertyName: "Green Leaf", ownerName: "" });
+    const text = drawnText(await renderReceiptPdf(pdfLib, receipt));
+    expect(text).toEqual(expect.arrayContaining(["SECURITY DEPOSIT RECEIPT", "DEPOSIT RECEIVED", "Security deposit", "Green Leaf management"]));
+  });
+
+  it("clamps long names and addresses to two lines and stays fast", async () => {
+    const long = buildReceipt(
+      { ...payment, amount: 1234567.5, transaction_id: "NEFT-HDFC-0000123456789-REF-ABCDEFGHIJ" },
+      {
+        tenantName: "Venkata Subramanian Lakshminarayanan Ramachandran Iyer",
+        propertyName: "Shree Sai Krupa Executive Paying Guest Accommodation for Working Professionals",
+        propertyAddress: "Plot No. 42, Survey No. 118/2B, Behind Old Hanuman Temple, Near Municipal Bus Depot, Karve Nagar, Kothrud, Pune 411052",
+        roomNumber: "Wing C, Floor 3, Room 312 (Window bed)",
+      },
+    );
+    const bytes = await renderReceiptPdf(pdfLib, long);
+    expect(bytes.length).toBeLessThan(10 * 1024);
+    const text = drawnText(bytes);
+    expect(text.filter((t) => t.endsWith("…")).length).toBeGreaterThanOrEqual(3);
+    expect(text.some((t) => t.startsWith("Txn ID: NEFT-HDFC"))).toBe(true);
+    const start = performance.now();
+    for (let i = 0; i < 20; i++) await renderReceiptPdf(pdfLib, long);
+    expect((performance.now() - start) / 20).toBeLessThan(50);
   });
 
   it("does not throw on Devanagari names, emoji or the rupee sign", async () => {
@@ -49,6 +121,20 @@ describe("receipt PDF", () => {
     expect(pdfText("श्री PG", "PG")).toBe("PG");
     expect(pdfText("“Shanti”\tNagar — Pune 🏠")).toBe("“Shanti” Nagar — Pune");
     expect(pdfText("José Müller")).toBe("José Müller");
+  });
+
+  it("ellipsizes and clamps to the width", async () => {
+    const doc = await pdfLib.PDFDocument.create();
+    const font = await doc.embedFont(pdfLib.StandardFonts.Helvetica);
+    expect(ellipsize("short", font, 10, 200)).toBe("short");
+    const cut = ellipsize("Txn ID: NEFT-HDFC-0000123456789-REF-ABCDEFGHIJ", font, 10, 120);
+    expect(cut.startsWith("Txn ID: NEFT")).toBe(true);
+    expect(cut.endsWith("…")).toBe(true);
+    expect(font.widthOfTextAtSize(cut, 10)).toBeLessThanOrEqual(120);
+    const lines = clampLines("one two three four five six seven eight nine ten eleven twelve", font, 10, 60, 2);
+    expect(lines).toHaveLength(2);
+    expect(lines[1].endsWith("…")).toBe(true);
+    for (const l of lines) expect(font.widthOfTextAtSize(l, 10)).toBeLessThanOrEqual(60);
   });
 
   it("wraps long text to the line width", async () => {
@@ -257,7 +343,7 @@ describe("send-payment-receipt", () => {
     const resp = await t.call(TENANT_A, receiptBody(PAID, { mode: "download" }));
     expect(resp.status).toBe(200);
     expect(resp.headers.get("Content-Type")).toBe("application/pdf");
-    expect(resp.headers.get("Content-Disposition")).toBe('attachment; filename="PGB-11111111-2026-11.pdf"');
+    expect(resp.headers.get("Content-Disposition")).toBe('attachment; filename="PGB-11111111-Nov-2026.pdf"');
     expect(head(new Uint8Array(await resp.arrayBuffer()))).toBe("%PDF-");
     expect(t.calls).toHaveLength(0);
     expect(t.db.tables.audit_logs).toHaveLength(0);
