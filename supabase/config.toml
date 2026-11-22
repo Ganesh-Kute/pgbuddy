@@ -1,14 +1,20 @@
 project_id = "vcpohetbsyyjqqkzuzxj"
 
+# Cron-only: authenticated in-function via CRON_SECRET or SUPABASE_SERVICE_ROLE_KEY
 [functions.rent-reminders]
 verify_jwt = false
 
 [functions.push-notifications]
-verify_jwt = false
+verify_jwt = true
 
 [functions.twilio-notifications]
+verify_jwt = true
+
+# Webhook-authenticated via x-razorpay-signature HMAC-SHA256
+[functions.razorpay-webhook]
 verify_jwt = false
 
+# Pre-login Supabase Auth Send SMS Hook: authenticated via SEND_SMS_HOOK_SECRET / CRON_SECRET + rate-limited
 [functions.send-sms-otp]
 enabled = true
 verify_jwt = false

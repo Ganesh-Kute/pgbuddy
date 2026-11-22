@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -62,6 +63,10 @@ const InstallPWA = () => {
       }
     }
   };
+
+  if (Capacitor.isNativePlatform()) {
+    return null;
+  }
 
   return (
     <div className="space-y-4">

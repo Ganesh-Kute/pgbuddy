@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { FileText, Upload, CheckCircle, Clock, XCircle, Plus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,18 +45,28 @@ const TenantDocuments = () => {
   const [docType, setDocType] = useState("aadhaar");
   const [file, setFile] = useState<File | null>(null);
 
-  const fetchDocs = async () => {
+  const fetchDocs_load = async () => {
+
+    const later = deferSetters<typeof fetchDocs_setters>();
+
+    await (async () => {
     if (!user) return;
     const [docRes, assignRes] = await Promise.all([
       supabase.from("tenant_documents").select("*").eq("tenant_id", user.id).order("created_at", { ascending: false }),
       supabase.from("tenant_assignments").select("property_id").eq("tenant_id", user.id).eq("is_active", true).maybeSingle(),
     ]);
-    setDocs(docRes.data ?? []);
-    setAssignment(assignRes.data);
-    setLoading(false);
+    later((s) => s.setDocs(docRes.data ?? []));
+    later((s) => s.setAssignment(assignRes.data));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { fetchDocs(); }, [user]);
+  const fetchDocs_setters = { setDocs, setAssignment, setLoading };
+
+  const { refresh: fetchDocs } = usePageData(["TenantDocuments"], fetchDocs_load, applyTo(fetchDocs_setters), !!user);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();

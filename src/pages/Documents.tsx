@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { FileText, CheckCircle, XCircle, Clock, Eye } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,18 +38,28 @@ const Documents = () => {
   const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
   const [selectedProp, setSelectedProp] = useState("all");
 
-  const fetchDocs = async () => {
+  const fetchDocs_load = async () => {
+
+    const later = deferSetters<typeof fetchDocs_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
     const [docRes, propRes] = await Promise.all([
       supabase.from("tenant_documents").select("*, properties(name)").order("created_at", { ascending: false }),
       supabase.from("properties").select("id, name").eq("owner_id", effectiveOwnerId),
     ]);
-    setDocs(docRes.data ?? []);
-    setProperties(propRes.data ?? []);
-    setLoading(false);
+    later((s) => s.setDocs(docRes.data ?? []));
+    later((s) => s.setProperties(propRes.data ?? []));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchDocs(); }, [effectiveOwnerId, staffLoading]);
+  const fetchDocs_setters = { setDocs, setProperties, setLoading };
+
+  const { refresh: fetchDocs } = usePageData(["Documents", effectiveOwnerId], fetchDocs_load, applyTo(fetchDocs_setters), !staffLoading);
 
   const updateStatus = async (id: string, status: string) => {
     await supabase.from("tenant_documents").update({
@@ -60,7 +71,7 @@ const Documents = () => {
     fetchDocs();
   };
 
-  const filtered = selectedProp === "all" ? docs : docs.filter(d => (d as any).properties?.name === selectedProp);
+  const filtered = selectedProp === "all" ? docs : docs.filter(d => d.properties?.name === selectedProp);
 
   return (
     <DashboardLayout>
@@ -101,7 +112,7 @@ const Documents = () => {
                     <div>
                       <p className="font-medium">{docTypeLabels[d.document_type] || d.document_type}</p>
                       <p className="text-sm text-muted-foreground">
-                        {d.document_name} · {(d as any).properties?.name} · {new Date(d.created_at).toLocaleDateString()}
+                        {d.document_name} · {d.properties?.name} · {new Date(d.created_at).toLocaleDateString()}
                       </p>
                     </div>
                   </div>

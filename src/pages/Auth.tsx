@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getAppName, getAppLogo, isWhiteLabel } from "@/lib/branding";
+import { ACCOUNT_REMOVED_FLAG, homeFor } from "@/lib/auth-roles";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
@@ -22,13 +23,32 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, role: userRole } = useAuth();
+  const { user, role: userRole, isStaff, loading: authLoading } = useAuth();
 
+  // The one place a signed-in user leaves this page: once their role is known, to their own home.
+  // With no role yet, /dashboard's guard shows the account-setup screen instead of bouncing.
   useEffect(() => {
-    if (user && userRole) {
-      navigate(userRole === "owner" ? "/dashboard" : "/tenant", { replace: true });
+    if (user && !authLoading) {
+      navigate(homeFor(userRole, isStaff) ?? "/dashboard", { replace: true });
     }
-  }, [user, userRole, navigate]);
+  }, [user, userRole, isStaff, authLoading, navigate]);
+
+  // The app signed out a login whose account had been removed: say why, once.
+  useEffect(() => {
+    let removed = false;
+    try {
+      removed = sessionStorage.getItem(ACCOUNT_REMOVED_FLAG) === "1";
+      sessionStorage.removeItem(ACCOUNT_REMOVED_FLAG);
+    } catch {
+      // Storage unavailable: nothing to show.
+    }
+    if (removed) {
+      toast({
+        title: "Please sign in again",
+        description: "This account was removed or changed. Sign in with your number to continue.",
+      });
+    }
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,14 +78,13 @@ const Auth = () => {
           type: 'sms',
         });
         if (error) throw error;
-        toast({ title: "Success!", description: "Logged in successfully! Loading dashboard..." });
-        
-        setTimeout(() => {
-          navigate("/dashboard");
-        }, 2000);
+        // No fixed redirect here: it sent tenants to /dashboard after 2 s, whatever their role.
+        // The effect above routes as soon as the role is known.
+        toast({ title: "Success!", description: "Logged in successfully!" });
       }
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error) {
+      const description = error instanceof Error ? error.message : "Something went wrong. Please try again.";
+      toast({ title: "Error", description, variant: "destructive" });
     } finally {
       setLoading(false);
     }

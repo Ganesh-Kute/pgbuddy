@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Typecheck app
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+      - name: Typecheck node config
+        run: npx tsc -p tsconfig.node.json --noEmit
+
+      - name: Lint hardened files
+        # Scoped to lint-clean modules (including src/pages) while remaining components/functions resolve pre-existing lint errors.
+        run: npx eslint src/App.tsx src/lib src/test src/hooks/useAuth.tsx src/hooks/useStaffAccess.ts src/components/ProtectedRoute.tsx src/pages tailwind.config.ts
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build web app
+        run: npm run build

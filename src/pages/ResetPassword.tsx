@@ -47,8 +47,8 @@ const ResetPassword = () => {
       toast({ title: "Password updated!", description: "You can now sign in with your new password." });
       await supabase.auth.signOut();
       navigate("/auth");
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }

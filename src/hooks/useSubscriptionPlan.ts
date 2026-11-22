@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import type { WhatsAppAction } from "@/hooks/useWhatsAppNotify";
 
 export type PlanSlug = "free" | "pro" | "business" | "enterprise";
 
@@ -53,12 +54,7 @@ const PLAN_LIMITS: Record<PlanSlug, PlanLimits> = {
   },
 };
 
-export type WhatsAppAction =
-  | "send-rent-reminder"
-  | "send-announcement"
-  | "send-complaint-alert"
-  | "send-vacancy-alert"
-  | "send-mess-reminder";
+export type { WhatsAppAction };
 
 /** Actions that require Business or Enterprise plan */
 const GATED_WA_ACTIONS: WhatsAppAction[] = [
@@ -68,42 +64,33 @@ const GATED_WA_ACTIONS: WhatsAppAction[] = [
   "send-mess-reminder",
 ];
 
+/** The active plan of one user. A plan whose period has ended counts as free. */
+export async function fetchPlanSlug(userId: string): Promise<PlanSlug> {
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("subscription_plans(slug), status, current_period_end")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return "free";
+  if (data.current_period_end && new Date(data.current_period_end) < new Date()) return "free";
+  const slug = data.subscription_plans?.slug as PlanSlug | undefined;
+  return slug && slug in PLAN_LIMITS ? slug : "free";
+}
+
 export const useSubscriptionPlan = (ownerId?: string | null) => {
   const { user } = useAuth();
-  const [planSlug, setPlanSlug] = useState<PlanSlug>("free");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const targetUserId = ownerId || user?.id;
-    if (!targetUserId) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchPlan = async () => {
-      const { data } = await supabase
-        .from("subscriptions")
-        .select("subscription_plans(slug), status, current_period_end")
-        .eq("user_id", targetUserId)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (data) {
-        const periodEnd = data.current_period_end;
-        if (periodEnd && new Date(periodEnd) < new Date()) {
-          setPlanSlug("free");
-        } else {
-          const slug = (data as any)?.subscription_plans?.slug as PlanSlug;
-          setPlanSlug(slug || "free");
-        }
-      } else {
-        setPlanSlug("free");
-      }
-      setLoading(false);
-    };
-
-    fetchPlan();
-  }, [user, ownerId]);
+  const targetUserId = ownerId || user?.id || null;
+  // Cached per user: the layout, the guard and the page all ask, and it used to be fetched by each.
+  const query = useQuery({
+    queryKey: ["subscription-plan", targetUserId],
+    queryFn: () => fetchPlanSlug(targetUserId as string),
+    enabled: !!targetUserId,
+    staleTime: 5 * 60_000,
+  });
+  const planSlug: PlanSlug = query.data ?? "free";
+  const loading = !!targetUserId && query.isPending;
 
   const isBusiness = planSlug === "business" || planSlug === "enterprise";
 

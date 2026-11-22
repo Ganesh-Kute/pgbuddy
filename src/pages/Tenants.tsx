@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { usePageData, deferSetters, applyTo } from "@/hooks/usePageData";
 import { Users, Plus, UserCheck, Search, Upload, FileText, Phone, Shield, X, Eye, IndianRupee, History, UserX, Download, ArrowUpDown, ArrowLeftRight, MoveRight, CheckCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +38,7 @@ interface TenantAssignment {
   tenant_phone?: string | null;
   tenant_name?: string | null;
   deposit_status?: string | null;
-  rooms?: { room_number: string };
+  rooms?: { room_number: string; rent_amount?: number | null };
   properties?: { name: string };
   profiles?: { full_name: string; phone: string | null };
 }
@@ -120,7 +121,11 @@ const Tenants = () => {
   const [swapTargetId, setSwapTargetId] = useState("");
   const [swapping, setSwapping] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData_load = async () => {
+
+    const later = deferSetters<typeof fetchData_setters>();
+
+    await (async () => {
     if (!effectiveOwnerId) return;
 
     // 1. Fetch owner's properties first
@@ -132,18 +137,18 @@ const Tenants = () => {
     let fetchedProps = propData ?? [];
 
     // For staff, further restrict to their accessible properties
-    if (isStaff && accessiblePropertyIds.length > 0) {
+    if (isStaff) { // staff see only their assigned properties, even when that is none
       fetchedProps = fetchedProps.filter(p => accessiblePropertyIds.includes(p.id));
     }
 
     const propIds = fetchedProps.map(p => p.id);
 
     if (propIds.length === 0) {
-      setAssignments([]);
-      setProperties([]);
-      setRooms([]);
-      setAllBeds([]);
-      setLoading(false);
+      later((s) => s.setAssignments([]));
+      later((s) => s.setProperties([]));
+      later((s) => s.setRooms([]));
+      later((s) => s.setAllBeds([]));
+      later((s) => s.setLoading(false));
       return;
     }
 
@@ -159,13 +164,13 @@ const Tenants = () => {
     const roomIds = fetchedRooms.map(r => r.id);
     let fetchedBeds: BedOption[] = [];
     if (roomIds.length > 0) {
-      const { data: bedData } = await (supabase as any).from("beds").select("*").in("room_id", roomIds).eq("is_vacant", true).order("bed_label", { ascending: true });
+      const { data: bedData } = await supabase.from("beds").select("*").in("room_id", roomIds).eq("is_vacant", true).order("bed_label", { ascending: true });
       fetchedBeds = (bedData ?? []) as BedOption[];
     }
 
     const data = assignRes.data ?? [];
     const tenantIds = [...new Set(data.map(a => a.tenant_id))];
-    let profilesMap: Record<string, { full_name: string; phone: string | null }> = {};
+    const profilesMap: Record<string, { full_name: string; phone: string | null }> = {};
     if (tenantIds.length > 0) {
       const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, phone").in("user_id", tenantIds);
       profiles?.forEach(p => { profilesMap[p.user_id] = p; });
@@ -173,18 +178,24 @@ const Tenants = () => {
 
     const fetchedAssignments = data.map(a => ({ ...a, profiles: a.tenant_id ? profilesMap[a.tenant_id] : null }));
 
-    setAssignments(fetchedAssignments);
-    setProperties(fetchedProps);
-    setRooms(fetchedRooms);
-    setAllBeds(fetchedBeds);
+    later((s) => s.setAssignments(fetchedAssignments));
+    later((s) => s.setProperties(fetchedProps));
+    later((s) => s.setRooms(fetchedRooms));
+    later((s) => s.setAllBeds(fetchedBeds));
 
     // Set tenant limit from subscription
-    const limit = (subRes.data as any)?.subscription_plans?.tenant_limit;
-    setTenantLimit(limit !== undefined && limit !== null ? limit : 5);
-    setLoading(false);
+    const limit = subRes.data?.subscription_plans?.tenant_limit;
+    later((s) => s.setTenantLimit(limit !== undefined && limit !== null ? limit : 5));
+    later((s) => s.setLoading(false));
+  })();
+
+    return later.commits;
+
   };
 
-  useEffect(() => { if (!staffLoading) fetchData(); }, [effectiveOwnerId, staffLoading]);
+  const fetchData_setters = { setAssignments, setProperties, setRooms, setAllBeds, setLoading, setTenantLimit };
+
+  const { refresh: fetchData } = usePageData(["Tenants", effectiveOwnerId, isStaff, accessiblePropertyIds.join()], fetchData_load, applyTo(fetchData_setters), !staffLoading);
 
   // Count active assignments per room
   const getActiveCountForRoom = (roomId: string) => {
@@ -346,7 +357,7 @@ const Tenants = () => {
 
     // Mark bed as occupied
     if (bedId) {
-      await (supabase as any).from("beds").update({ is_vacant: false }).eq("id", bedId);
+      await supabase.from("beds").update({ is_vacant: false }).eq("id", bedId);
     }
     await updateRoomVacancy(roomId);
     
@@ -399,7 +410,7 @@ const Tenants = () => {
     setIdProofType(a.id_proof_type ?? "");
     setIdProofNumber(a.id_proof_number ?? "");
     setTenantNotes(a.notes ?? "");
-    setDetailRent(String(a.custom_rent ?? (a as any).rooms?.rent_amount ?? ""));
+    setDetailRent(String(a.custom_rent ?? a.rooms?.rent_amount ?? ""));
     setTenantPhone(a.profiles?.phone ?? a.tenant_phone ?? "");
     setTenantName(a.profiles?.full_name ?? a.tenant_name ?? "");
     // Fetch documents and rent history in parallel
@@ -423,8 +434,8 @@ const Tenants = () => {
     if (!detailTenant || !user) return;
     setSavingDetails(true);
     const rentValue = detailRent ? parseFloat(detailRent) : null;
-    const oldRent = detailTenant.custom_rent ?? (detailTenant as any).rooms?.rent_amount ?? 0;
-    const newRent = rentValue ?? (detailTenant as any).rooms?.rent_amount ?? 0;
+    const oldRent = detailTenant.custom_rent ?? detailTenant.rooms?.rent_amount ?? 0;
+    const newRent = rentValue ?? detailTenant.rooms?.rent_amount ?? 0;
 
     const { error } = await supabase.from("tenant_assignments").update({
       emergency_contact_name: emergencyName || null,
@@ -589,7 +600,7 @@ const Tenants = () => {
   });
 
   const getTenantRent = (a: TenantAssignment) => {
-    return a.custom_rent ?? (a as any).rooms?.rent_amount ?? 0;
+    return a.custom_rent ?? a.rooms?.rent_amount ?? 0;
   };
 
   return (
@@ -609,8 +620,8 @@ const Tenants = () => {
                 const rows = assignments.map(a => ({
                   Name: a.profiles?.full_name || "Unknown",
                   Phone: a.profiles?.phone || "",
-                  Property: (a as any).properties?.name || "",
-                  Room: (a as any).rooms?.room_number || "",
+                  Property: a.properties?.name || "",
+                  Room: a.rooms?.room_number || "",
                   "Rent (₹)": getTenantRent(a),
                   Status: a.is_active ? "Active" : "Moved Out",
                   "Move-in": a.move_in_date,
@@ -622,7 +633,7 @@ const Tenants = () => {
                 const headers = Object.keys(rows[0]);
                 const csv = [
                   headers.join(","),
-                  ...rows.map(r => headers.map(h => `"${String((r as any)[h]).replace(/"/g, '""')}"`).join(","))
+                  ...rows.map(r => headers.map(h => `"${String(r[h as keyof typeof r]).replace(/"/g, '""')}"`).join(","))
                 ].join("\n");
                 const blob = new Blob([csv], { type: "text/csv" });
                 const url = URL.createObjectURL(blob);
@@ -926,8 +937,8 @@ const Tenants = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-1 text-sm">
-                <p><span className="text-muted-foreground">Property:</span> {(a as any).properties?.name}</p>
-                <p><span className="text-muted-foreground">Room:</span> {(a as any).rooms?.room_number}</p>
+                <p><span className="text-muted-foreground">Property:</span> {a.properties?.name}</p>
+                <p><span className="text-muted-foreground">Room:</span> {a.rooms?.room_number}</p>
                 <p><span className="text-muted-foreground">{a.is_active ? "Move-in:" : "Moved out:"}</span> {a.is_active ? a.move_in_date : a.move_out_date || a.move_in_date}</p>
                 <p className="flex items-center gap-1 font-semibold">
                   <IndianRupee className="w-3 h-3" />
@@ -1002,11 +1013,11 @@ const Tenants = () => {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <span className="text-muted-foreground block">Property</span>
-                    <span className="font-medium">{(detailTenant as any).properties?.name}</span>
+                    <span className="font-medium">{detailTenant.properties?.name}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground block">Room</span>
-                    <span className="font-medium">{(detailTenant as any).rooms?.room_number}</span>
+                    <span className="font-medium">{detailTenant.rooms?.room_number}</span>
                   </div>
                    <div>
                      <span className="text-muted-foreground block">Name</span>
@@ -1034,10 +1045,10 @@ const Tenants = () => {
                     className="h-9"
                     value={detailRent}
                     onChange={e => setDetailRent(e.target.value)}
-                    placeholder={`Room default: ₹${(detailTenant as any).rooms?.rent_amount ?? 0}`}
+                    placeholder={`Room default: ₹${detailTenant.rooms?.rent_amount ?? 0}`}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Room default: ₹{Number((detailTenant as any).rooms?.rent_amount ?? 0).toLocaleString()}. Set a custom amount to override.
+                    Room default: ₹{Number(detailTenant.rooms?.rent_amount ?? 0).toLocaleString()}. Set a custom amount to override.
                   </p>
                   <Textarea
                     value={rentChangeNote}
@@ -1246,7 +1257,7 @@ const Tenants = () => {
                               <SelectContent>
                                 {swappableTenants.map(a => (
                                   <SelectItem key={a.id} value={a.id}>
-                                    {a.profiles?.full_name || "Unknown"} – {(a as any).properties?.name}, Room {(a as any).rooms?.room_number}
+                                    {a.profiles?.full_name || "Unknown"} – {a.properties?.name}, Room {a.rooms?.room_number}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -1257,8 +1268,8 @@ const Tenants = () => {
                             if (!target) return null;
                             return (
                               <div className="text-xs text-muted-foreground p-2 rounded bg-muted/50 space-y-0.5">
-                                <p><strong>{detailTenant.profiles?.full_name}</strong> → {(target as any).properties?.name}, Room {(target as any).rooms?.room_number}</p>
-                                <p><strong>{target.profiles?.full_name}</strong> → {(detailTenant as any).properties?.name}, Room {(detailTenant as any).rooms?.room_number}</p>
+                                <p><strong>{detailTenant.profiles?.full_name}</strong> → {target.properties?.name}, Room {target.rooms?.room_number}</p>
+                                <p><strong>{target.profiles?.full_name}</strong> → {detailTenant.properties?.name}, Room {detailTenant.rooms?.room_number}</p>
                               </div>
                             );
                           })()}

@@ -2,79 +2,87 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AppLoadingSkeleton } from "@/components/ui/AppLoadingSkeleton";
 import { ThemeProvider } from "next-themes";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/hooks/useAuth";
 import { LanguageProvider } from "@/i18n/LanguageContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import Index from "./pages/Index";
-import Auth from "./pages/Auth";
+const Index = lazy(() => import("./pages/Index"));
+const Auth = lazy(() => import("./pages/Auth"));
 import { isWhiteLabel } from "@/lib/branding";
-import Dashboard from "./pages/Dashboard";
-import Properties from "./pages/Properties";
-import Rooms from "./pages/Rooms";
-import Tenants from "./pages/Tenants";
-import Payments from "./pages/Payments";
-import Complaints from "./pages/Complaints";
-import Notices from "./pages/Notices";
-import Expenses from "./pages/Expenses";
-import PaymentSettings from "./pages/PaymentSettings";
-import Announcements from "./pages/Announcements";
-import TenantInvitations from "./pages/TenantInvitations";
-import TenantDashboard from "./pages/TenantDashboard";
-import TenantPayments from "./pages/TenantPayments";
-import TenantComplaints from "./pages/TenantComplaints";
-import TenantNotices from "./pages/TenantNotices";
-import TenantAnnouncements from "./pages/TenantAnnouncements";
-import Marketplace from "./pages/Marketplace";
-import ProfileSettings from "./pages/ProfileSettings";
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Properties = lazy(() => import("./pages/Properties"));
+const Rooms = lazy(() => import("./pages/Rooms"));
+const Tenants = lazy(() => import("./pages/Tenants"));
+const Payments = lazy(() => import("./pages/Payments"));
+const Complaints = lazy(() => import("./pages/Complaints"));
+const Notices = lazy(() => import("./pages/Notices"));
+const Expenses = lazy(() => import("./pages/Expenses"));
+const PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
+const Announcements = lazy(() => import("./pages/Announcements"));
+const TenantInvitations = lazy(() => import("./pages/TenantInvitations"));
+const TenantDashboard = lazy(() => import("./pages/TenantDashboard"));
+const TenantPayments = lazy(() => import("./pages/TenantPayments"));
+const TenantComplaints = lazy(() => import("./pages/TenantComplaints"));
+const TenantNotices = lazy(() => import("./pages/TenantNotices"));
+const TenantAnnouncements = lazy(() => import("./pages/TenantAnnouncements"));
+const Marketplace = lazy(() => import("./pages/Marketplace"));
+const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 import DashboardLayout from "./components/dashboard/DashboardLayout";
 import TenantLayout from "./components/dashboard/TenantLayout";
-import ResetPassword from "./pages/ResetPassword";
-import BrowsePG from "./pages/BrowsePG";
-import ListPG from "./pages/ListPG";
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const BrowsePG = lazy(() => import("./pages/BrowsePG"));
+const ListPG = lazy(() => import("./pages/ListPG"));
 import NotFound from "./pages/NotFound";
-import Subscription from "./pages/Subscription";
-import PropertyDetail from "./pages/PropertyDetail";
-import ManageListing from "./pages/ManageListing";
-import TenantReviews from "./pages/TenantReviews";
-import MealMenu from "./pages/MealMenu";
-import TenantMealMenu from "./pages/TenantMealMenu";
-import Referrals from "./pages/Referrals";
-import TenantChat from "./pages/TenantChat";
-import CityPGs from "./pages/CityPGs";
-import TenantOnboarding from "./pages/TenantOnboarding";
-import TenantDocuments from "./pages/TenantDocuments";
-import Documents from "./pages/Documents";
-import VisitorLog from "./pages/VisitorLog";
-import UtilityBills from "./pages/UtilityBills";
-import TenantUtilityBills from "./pages/TenantUtilityBills";
-import TenantAnalytics from "./pages/TenantAnalytics";
-import AuditLogs from "./pages/AuditLogs";
-import StaffManagement from "./pages/StaffManagement";
-import MoveOutManagement from "./pages/MoveOutManagement";
-import TenantMoveOut from "./pages/TenantMoveOut";
-import MessPlans from "./pages/MessPlans";
-import MessMembers from "./pages/MessMembers";
-import MessAttendance from "./pages/MessAttendance";
-import MessPayments from "./pages/MessPayments";
-import MessManagement from "./pages/MessManagement";
-import PublicReceipt from "./pages/PublicReceipt";
-import AboutUs from "./pages/static/AboutUs";
-import Careers from "./pages/static/Careers";
-import Blog from "./pages/static/Blog";
-import Contact from "./pages/static/Contact";
-import HelpCenter from "./pages/static/HelpCenter";
-import FAQs from "./pages/static/FAQs";
-import PrivacyPolicy from "./pages/static/PrivacyPolicy";
-import TermsOfService from "./pages/static/TermsOfService";
-import Pricing from "./pages/static/Pricing";
-import UserGuide from "./pages/static/UserGuide";
-import Features from "./pages/static/Features";
+const Subscription = lazy(() => import("./pages/Subscription"));
+const PropertyDetail = lazy(() => import("./pages/PropertyDetail"));
+const ManageListing = lazy(() => import("./pages/ManageListing"));
+const TenantReviews = lazy(() => import("./pages/TenantReviews"));
+const MealMenu = lazy(() => import("./pages/MealMenu"));
+const TenantMealMenu = lazy(() => import("./pages/TenantMealMenu"));
+const Referrals = lazy(() => import("./pages/Referrals"));
+const TenantChat = lazy(() => import("./pages/TenantChat"));
+const CityPGs = lazy(() => import("./pages/CityPGs"));
+const TenantOnboarding = lazy(() => import("./pages/TenantOnboarding"));
+const TenantDocuments = lazy(() => import("./pages/TenantDocuments"));
+const Documents = lazy(() => import("./pages/Documents"));
+const VisitorLog = lazy(() => import("./pages/VisitorLog"));
+const UtilityBills = lazy(() => import("./pages/UtilityBills"));
+const TenantUtilityBills = lazy(() => import("./pages/TenantUtilityBills"));
+const TenantAnalytics = lazy(() => import("./pages/TenantAnalytics"));
+const AuditLogs = lazy(() => import("./pages/AuditLogs"));
+const StaffManagement = lazy(() => import("./pages/StaffManagement"));
+const MoveOutManagement = lazy(() => import("./pages/MoveOutManagement"));
+const TenantMoveOut = lazy(() => import("./pages/TenantMoveOut"));
+const MessPlans = lazy(() => import("./pages/MessPlans"));
+const MessMembers = lazy(() => import("./pages/MessMembers"));
+const MessAttendance = lazy(() => import("./pages/MessAttendance"));
+const MessPayments = lazy(() => import("./pages/MessPayments"));
+const MessManagement = lazy(() => import("./pages/MessManagement"));
+const PublicReceipt = lazy(() => import("./pages/PublicReceipt"));
+const AboutUs = lazy(() => import("./pages/static/AboutUs"));
+const Careers = lazy(() => import("./pages/static/Careers"));
+const Blog = lazy(() => import("./pages/static/Blog"));
+const Contact = lazy(() => import("./pages/static/Contact"));
+const HelpCenter = lazy(() => import("./pages/static/HelpCenter"));
+const FAQs = lazy(() => import("./pages/static/FAQs"));
+const PrivacyPolicy = lazy(() => import("./pages/static/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/static/TermsOfService"));
+const Pricing = lazy(() => import("./pages/static/Pricing"));
+const UserGuide = lazy(() => import("./pages/static/UserGuide"));
+const Features = lazy(() => import("./pages/static/Features"));
 
 
-const queryClient = new QueryClient();
+// Pages load on demand: the app used to ship every page in one 2 MB script before the first paint.
+// Cached reads stay fresh for a minute, so moving between pages does not refetch everything.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 60_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 },
+  },
+});
 
 const App = () => (
   <HelmetProvider>
@@ -86,6 +94,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <Suspense fallback={<AppLoadingSkeleton />}>
             <Routes>
               <Route path="/" element={isWhiteLabel ? <Auth /> : <Index />} />
               <Route path="/auth" element={<Auth />} />
@@ -152,6 +161,7 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
           </BrowserRouter>
         </TooltipProvider>
       </LanguageProvider>

@@ -1,14 +1,15 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Building2, User, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const ForWhoSection = () => {
+  const prefersReduced = useReducedMotion();
   return (
     <section className="py-24 sm:py-32">
       <div className="container mx-auto px-4">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={prefersReduced ? false : { opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
@@ -28,8 +29,8 @@ const ForWhoSection = () => {
         <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
           {/* For PG Owners */}
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={prefersReduced ? false : { opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
             className="group"
@@ -78,8 +79,8 @@ const ForWhoSection = () => {
 
           {/* For Tenants */}
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={prefersReduced ? false : { opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.1 }}
             className="group"
