@@ -10,11 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import TenantLayout from "@/components/dashboard/TenantLayout";
 import { supabase } from "@/integrations/supabase/client";
+import { prepareUpload, UploadRejected } from "@/lib/image-compress";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import RentReceipt from "@/components/RentReceipt";
 import { formatReceiptWhatsAppFeedback, useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { buildReceipt } from "@/lib/receipt";
+import { StorageFileLink } from "@/components/StorageFileLink";
 
 interface Payment {
   id: string;
@@ -115,12 +117,23 @@ const TenantPayments = () => {
     if (!user) return;
     setUploading(paymentId);
 
-    const fileExt = file.name.split(".").pop();
-    const filePath = `${user.id}/${paymentId}.${fileExt}`;
+    let prepared;
+    try {
+      prepared = await prepareUpload(file, "document");
+    } catch (err) {
+      toast({
+        title: "Cannot upload this file",
+        description: err instanceof UploadRejected ? err.message : "Please try another file.",
+        variant: "destructive",
+      });
+      setUploading(null);
+      return;
+    }
+    const filePath = `${user.id}/${paymentId}.${prepared.ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from("payment-proofs")
-      .upload(filePath, file, { upsert: true });
+      .upload(filePath, prepared.body, { upsert: true, contentType: prepared.contentType });
 
     if (uploadError) {
       toast({ title: "Upload failed", description: uploadError.message, variant: "destructive" });
@@ -393,7 +406,7 @@ const TenantPayments = () => {
                         <div className="flex items-center gap-2 text-sm">
                           <CheckCircle className="w-4 h-4 text-success" />
                           <span className="text-muted-foreground">Proof submitted · Awaiting approval</span>
-                          <a href={p.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary text-xs underline">View</a>
+                          <StorageFileLink bucket="payment-proofs" stored={p.proof_url} className="text-primary text-xs underline">View</StorageFileLink>
                         </div>
                       ) : (
                         <Button variant="outline" size="sm" className="gap-2" onClick={() => {
@@ -420,7 +433,7 @@ const TenantPayments = () => {
                           <div className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3 text-success" />
                             <span>Proof attached</span>
-                            <a href={p.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View</a>
+                            <StorageFileLink bucket="payment-proofs" stored={p.proof_url} className="text-primary underline">View</StorageFileLink>
                           </div>
                         )}
                         <div className="ml-auto flex flex-wrap items-center gap-2">

@@ -441,7 +441,7 @@ describe("Phase 3 Receipt UI & Hook", () => {
         },
       });
       expect(createUrlMock).toHaveBeenCalledWith(pdfBlob);
-      expect(clickedDownloads).toEqual(["PGB-ABCDEF12-2026-11.pdf"]);
+      expect(clickedDownloads).toEqual(["PGB-ABCDEF12-Nov-2026.pdf"]);
       expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Receipt PDF downloaded" }));
       webView.cleanup();
 

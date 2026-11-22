@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
+import { StorageFileLink } from "@/components/StorageFileLink";
 
 interface Bill {
   id: string;
@@ -302,9 +303,9 @@ const UtilityBills = () => {
                       <div className="flex items-center gap-2 text-sm flex-1">
                         <CheckCircle className="w-4 h-4 text-success" />
                         <span className="text-muted-foreground">Payment proof uploaded</span>
-                        <a href={b.proof_url} target="_blank" rel="noopener noreferrer" className="text-primary text-xs underline flex items-center gap-1">
+                        <StorageFileLink bucket="payment-proofs" stored={b.proof_url} className="text-primary text-xs underline flex items-center gap-1">
                           <Eye className="w-3 h-3" /> View
-                        </a>
+                        </StorageFileLink>
                       </div>
                       {b.status === "pending" && (
                         <Button size="sm" className="bg-success hover:bg-success/90 gap-1" onClick={() => updateStatus(b.id, "paid")}>

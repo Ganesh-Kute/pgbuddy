@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
+import { prepareUpload, UploadRejected } from "@/lib/image-compress";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
@@ -495,13 +496,25 @@ const Tenants = () => {
   const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!detailTenant || !e.target.files?.[0]) return;
     const file = e.target.files[0];
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max 5MB allowed", variant: "destructive" });
+    let prepared;
+    try {
+      prepared = await prepareUpload(file, "document");
+    } catch (err) {
+      toast({
+        title: "Cannot upload this file",
+        description: err instanceof UploadRejected ? err.message : "Please try another file.",
+        variant: "destructive",
+      });
+      e.target.value = "";
       return;
     }
     setUploading(true);
-    const filePath = `${detailTenant.id}/${Date.now()}_${file.name}`;
-    const { error } = await supabase.storage.from("tenant-documents").upload(filePath, file);
+    // Keep the readable name, with the extension of what is actually uploaded.
+    const baseName = file.name.replace(/\.[^.]+$/, "").replace(/[^\w\- ]+/g, "_").slice(0, 60) || "document";
+    const filePath = `${detailTenant.id}/${Date.now()}_${baseName}.${prepared.ext}`;
+    const { error } = await supabase.storage
+      .from("tenant-documents")
+      .upload(filePath, prepared.body, { contentType: prepared.contentType });
     if (error) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
     } else {

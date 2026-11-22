@@ -138,11 +138,21 @@ describe("repository security and CI hygiene (Track C)", () => {
     expect(present).toEqual([]);
   });
 
+  // Daily clean-up of old log rows (free plan storage): sent/failed WhatsApp queue rows after 30 days.
+  const RETENTION_STATEMENTS: Record<string, string[]> = {
+    "20261122150000_storage_limits_and_cleanup.sql": [
+      "DELETE FROM public.whatsapp_message_queue\n  WHERE status IN ('sent', 'failed') AND created_at < now() - interval '30 days';",
+    ],
+  };
+
   it("keeps supabase/migrations free of destructive reset/diagnostic SQL and archives them in supabase/scripts", () => {
     const migDir = path.join(ROOT, "supabase", "migrations");
     const dangerous: string[] = [];
     for (const file of fs.readdirSync(migDir).filter((f) => f.endsWith(".sql"))) {
-      const sql = fs.readFileSync(path.join(migDir, file), "utf8");
+      let sql = fs.readFileSync(path.join(migDir, file), "utf8");
+      // Scheduled log retention is not a reset: only these exact statements are exempt, so any other
+      // DELETE added to the same file still fails this test.
+      for (const allowed of RETENTION_STATEMENTS[file] ?? []) sql = sql.replace(allowed, "");
       if (/\bTRUNCATE\s+TABLE\b/i.test(sql) || /\bDELETE\s+FROM\s+(?:auth\.users|public\.)/i.test(sql) || /RAISE\s+NOTICE\s+'---/i.test(sql)) {
         dangerous.push(file);
       }

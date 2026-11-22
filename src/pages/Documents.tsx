@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
+import { openStorageFile } from "@/lib/storage-files";
 
 interface TenantDoc {
   id: string;
@@ -17,6 +18,7 @@ interface TenantDoc {
   document_type: string;
   document_name: string;
   url: string;
+  storage_path?: string | null;
   status: string;
   notes: string | null;
   created_at: string;
@@ -117,7 +119,14 @@ const Documents = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => window.open(d.url, "_blank")}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        const ok = await openStorageFile("tenant-documents", d.storage_path || d.url);
+                        if (!ok) toast({ title: "Could not open the document", description: "It may have been removed, or you may not have access.", variant: "destructive" });
+                      }}
+                    >
                       <Eye className="w-3 h-3 mr-1" /> View
                     </Button>
                     {d.status === "pending" && (

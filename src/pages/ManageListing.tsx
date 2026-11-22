@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
+import { prepareUpload, UploadRejected } from "@/lib/image-compress";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscriptionPlan } from "@/hooks/useSubscriptionPlan";
@@ -126,14 +127,19 @@ const ManageListing = () => {
     }
 
     for (const file of files) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast({ title: "File too large", description: `${file.name} exceeds 10MB limit`, variant: "destructive" });
+      let prepared;
+      try {
+        prepared = await prepareUpload(file, "photo");
+      } catch (err) {
+        const description = err instanceof UploadRejected ? err.message : "Please try another photo.";
+        toast({ title: `Cannot upload ${file.name}`, description, variant: "destructive" });
         continue;
       }
-      const ext = file.name.split(".").pop();
-      const storagePath = `${selectedProperty}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const storagePath = `${selectedProperty}/${Date.now()}_${Math.random().toString(36).slice(2)}.${prepared.ext}`;
 
-      const { error: uploadErr } = await supabase.storage.from("property-photos").upload(storagePath, file);
+      const { error: uploadErr } = await supabase.storage
+        .from("property-photos")
+        .upload(storagePath, prepared.body, { contentType: prepared.contentType });
       if (uploadErr) {
         toast({ title: "Upload failed", description: uploadErr.message, variant: "destructive" });
         continue;
