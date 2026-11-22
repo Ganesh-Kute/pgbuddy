@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountInWords, buildReceipt, formatIndiaDate, formatIndianNumber, receiptNumber } from "@/lib/receipt";
+import { amountInWords, buildReceipt, formatIndiaDate, formatIndianNumber, formatPeriod, receiptNumber } from "@/lib/receipt";
 
 const now = new Date("2026-11-22T06:00:00Z");
 
@@ -65,5 +65,21 @@ describe("receipt model", () => {
   it("keeps file names safe for WhatsApp", () => {
     const r = buildReceipt({ id: "abcd1234", amount: 1, month: "Nov/Dec 2026 <x>", status: "paid" }, {}, now);
     expect(r.fileName).toMatch(/^[\w\-. ]{1,80}\.pdf$/);
+  });
+
+  it("turns stored months into a readable period", () => {
+    expect(formatPeriod("2026-11")).toBe("Nov 2026");
+    expect(formatPeriod("2026-01-01")).toBe("Jan 2026");
+    expect(formatPeriod("2026-13")).toBe("2026-13");
+    expect(formatPeriod("November 2026")).toBe("November 2026");
+    expect(formatPeriod(null)).toBe("");
+    const r = buildReceipt({ id: "abcd1234", amount: 5000, month: "2026-11", status: "paid" }, { ownerPhone: " +91 98765 43210 " }, now);
+    expect(r.period).toBe("Nov 2026");
+    expect(r.lines[0].label).toBe("Monthly rent - Nov 2026");
+    expect(r.fileName).toBe("PGB-ABCD1234-Nov-2026.pdf");
+    expect(r.ownerPhone).toBe("+91 98765 43210");
+    const d = buildReceipt({ id: "abcd1234", amount: 5000, month: "2026-11", payment_type: "deposit", status: "paid" }, {}, now);
+    expect(d.period).toBe("");
+    expect(d.ownerPhone).toBe("");
   });
 });
