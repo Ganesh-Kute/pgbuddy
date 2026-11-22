@@ -119,6 +119,7 @@ describe("S8: CORS origin allowlist & constant-time comparison", () => {
   it("allows production web, Capacitor mobile, localhost dev, and ALLOWED_ORIGINS, and rejects unknown origins", () => {
     expect(isAllowedOrigin("https://pgbuddy.lovable.app")).toBe(true);
     expect(isAllowedOrigin("https://pgbuddy-zeta-rust.vercel.app")).toBe(true);
+    expect(isAllowedOrigin("https://pgbuddy.getgrm.tech")).toBe(true);
     expect(isAllowedOrigin("https://pgbuddy.in")).toBe(true);
     expect(isAllowedOrigin("https://localhost")).toBe(true);
     expect(isAllowedOrigin("capacitor://localhost")).toBe(true);
