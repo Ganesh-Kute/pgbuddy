@@ -1,5 +1,6 @@
-import { cloudConfigFromEnv, sendReceiptDocument, sendRentReminder, type CloudConfig } from "../_shared/whatsapp-cloud.ts";
-import { formatIndianNumber, formatPeriod } from "../_shared/receipt-model.ts";
+import { cloudConfigFromEnv, sendReceiptDocument, sendRentReminder, sendTextTemplate, type CloudConfig } from "../_shared/whatsapp-cloud.ts";
+import { TEMPLATES, type TemplateDef } from "../_shared/whatsapp-templates.ts";
+import { formatIndiaDate, formatIndianNumber, formatPeriod } from "../_shared/receipt-model.ts";
 import {
   ConfigError,
   type EnvGetter,
@@ -81,6 +82,7 @@ interface TwilioPayload {
   action?: unknown;
   /** Rent reminder: when the rent is due, e.g. "5 Dec 2026". */
   due_date?: unknown;
+  reminder_type?: unknown;
   property_id?: unknown;
   tenant_ids?: unknown;
   tenant_phone?: unknown;
@@ -194,6 +196,32 @@ async function sendBulkWhatsApp(
     }
   }
   return sentCount;
+}
+
+/**
+ * One message: Meta's official API with an approved template first; if that does not deliver (template
+ * not approved yet, Meta down or blocking), the older providers via `fallback`. A number that is not on
+ * WhatsApp is not retried elsewhere.
+ */
+async function sendCloudFirst(
+  to: string,
+  template: { def: TemplateDef; values: string[] },
+  cfg: WaProviderConfig,
+  fetchFn: typeof fetch,
+  fallback: () => Promise<boolean>,
+): Promise<boolean> {
+  if (cfg.cloud) {
+    const res = await sendTextTemplate(cfg.cloud, to, template.def, template.values, fetchFn);
+    if (res.ok) return true;
+    console.warn(`[WA Cloud] ${template.def.name} not sent (${res.reason}): ${res.detail ?? ""}`);
+    if (res.reason === "not_on_whatsapp") return false;
+  }
+  return fallback();
+}
+
+/** "2026-11-05" -> "05 Nov 2026"; anything else is shown as given. */
+function dueDateText(raw: string): string {
+  return /^\d{4}-\d{2}-\d{2}/.test(raw) ? formatIndiaDate(raw) : raw;
 }
 
 async function sendSingleWhatsApp(
@@ -688,11 +716,18 @@ export function createTwilioNotificationsHandler({
           return jsonResponse({ sent: 0, message: "No recipients found" }, 200, corsHeaders);
         }
 
+        // The automatic reminder sends the phone and account id but no name: look the name up.
+        if (tenantPhone && !asStr(payload.tenant_name).trim() && tenantIds.length === 1) {
+          const { data: prof } = await supabase.from("profiles").select("full_name").eq("user_id", tenantIds[0]).maybeSingle();
+          if (typeof prof?.full_name === "string" && prof.full_name.trim()) recipients[0].full_name = prof.full_name.trim();
+        }
+
         // Official API first, one template message per tenant; whoever it cannot reach (template not
         // approved yet, number not on WhatsApp, Meta down) goes through the older providers below.
         let cloudSent = 0;
         if (providerCfg.cloud) {
-          const dueDate = asStr(payload.due_date).trim() || "the agreed date";
+          const dueDate = dueDateText(asStr(payload.due_date).trim()) || "the agreed date";
+          const overdue = asStr(payload.reminder_type) === "overdue";
           const period = formatPeriod(month) || month;
           const leftover: typeof recipients = [];
           for (const r of recipients) {
@@ -702,6 +737,7 @@ export function createTwilioNotificationsHandler({
               period,
               propertyName,
               dueDate,
+              overdue,
             }, fetchFn);
             if (res.ok) cloudSent++;
             else {
@@ -782,8 +818,26 @@ export function createTwilioNotificationsHandler({
           return jsonResponse({ sent: 0, message: "No tenants with phone numbers" }, 200, corsHeaders);
         }
 
-        const phonesList = allRecipients.map((r) => r.phone);
-        const paramsList = allRecipients.map(() => [title, content, propertyName]);
+        // Official API first; whoever it cannot reach goes through the older providers below.
+        let cloudSent = 0;
+        let pending = allRecipients;
+        if (providerCfg.cloud) {
+          pending = [];
+          for (const r of allRecipients) {
+            const res = await sendTextTemplate(providerCfg.cloud, r.phone, TEMPLATES.pgNotice, [propertyName, title, content], fetchFn);
+            if (res.ok) cloudSent++;
+            else {
+              console.warn(`[WA Cloud] pg_notice not sent (${res.reason}): ${res.detail ?? ""}`);
+              if (res.reason !== "not_on_whatsapp") pending.push(r);
+            }
+          }
+          if (pending.length === 0) {
+            return jsonResponse({ sent: cloudSent, total: allRecipients.length }, 200, corsHeaders);
+          }
+        }
+
+        const phonesList = pending.map((r) => r.phone);
+        const paramsList = pending.map(() => [title, content, propertyName]);
         const messageText = `📢 *${propertyName} — New Announcement*\n\n────────────────────\n📌 *${title}*\n\n${content}\n────────────────────\n_Sent via PG Buddy • ${propertyName}_`;
 
         const sent = await sendBulkWhatsApp(
@@ -795,7 +849,7 @@ export function createTwilioNotificationsHandler({
           fetchFn,
         );
 
-        return jsonResponse({ sent, total: allRecipients.length }, 200, corsHeaders);
+        return jsonResponse({ sent: sent + cloudSent, total: allRecipients.length }, 200, corsHeaders);
       }
 
       if (action === "send-welcome-message") {
@@ -810,13 +864,12 @@ export function createTwilioNotificationsHandler({
         const params = [tenantName, propertyName, roomNumber, appUrl];
         const messageText = `👋 *Welcome to ${propertyName}!*\n\n────────────────────\nHi *${tenantName}*,\n\nYou’ve been assigned to:\n🏠 *Property:* ${propertyName}\n🚪 *Room:* ${roomNumber}\n\n📲 Access your dashboard, pay rent, and raise complaints anytime:\n${appUrl}\n────────────────────\n_Sent via PG Buddy_`;
 
-        const ok = await sendSingleWhatsApp(
+        const ok = await sendCloudFirst(
           tenantPhone,
-          "welcome_tenant",
-          params,
-          messageText,
+          { def: TEMPLATES.tenantWelcome, values: [tenantName, propertyName, roomNumber] },
           providerCfg,
           fetchFn,
+          () => sendSingleWhatsApp(tenantPhone, "welcome_tenant", params, messageText, providerCfg, fetchFn),
         );
 
         return jsonResponse({ sent: ok ? 1 : 0, total: 1 }, 200, corsHeaders);
@@ -909,7 +962,9 @@ export function createTwilioNotificationsHandler({
 
         let sent = 0;
         for (const r of recipients) {
-          if (await sendSingleWhatsApp(r.phone, "complaint_alert", params, messageText, providerCfg, fetchFn)) {
+          const viaCloud = { def: TEMPLATES.complaintAlert, values: [propName, tenantName, roomNumber, category, title] };
+          if (await sendCloudFirst(r.phone, viaCloud, providerCfg, fetchFn, () =>
+            sendSingleWhatsApp(r.phone, "complaint_alert", params, messageText, providerCfg, fetchFn))) {
             sent++;
           }
         }
@@ -976,7 +1031,9 @@ export function createTwilioNotificationsHandler({
 
         let sent = 0;
         for (const r of recipients) {
-          if (await sendSingleWhatsApp(r.phone, "announcement", params, messageText, providerCfg, fetchFn)) {
+          const viaCloud = { def: TEMPLATES.vacancyAlert, values: [propName, tenantName, dueDateText(expectedMoveOut)] };
+          if (await sendCloudFirst(r.phone, viaCloud, providerCfg, fetchFn, () =>
+            sendSingleWhatsApp(r.phone, "announcement", params, messageText, providerCfg, fetchFn))) {
             sent++;
           }
         }
@@ -1045,7 +1102,12 @@ export function createTwilioNotificationsHandler({
 
         let sent = 0;
         for (const r of recipients) {
-          if (await sendSingleWhatsApp(r.phone, "payment_approval", params, messageText, providerCfg, fetchFn)) {
+          const viaCloud = {
+            def: TEMPLATES.paymentProofSubmitted,
+            values: [propName, tenantName, roomNumber, formatIndianNumber(Number(amount) || 0), formatPeriod(month) || month],
+          };
+          if (await sendCloudFirst(r.phone, viaCloud, providerCfg, fetchFn, () =>
+            sendSingleWhatsApp(r.phone, "payment_approval", params, messageText, providerCfg, fetchFn))) {
             sent++;
           }
         }
@@ -1107,13 +1169,15 @@ export function createTwilioNotificationsHandler({
       const params = [memberName, amount, month, messName];
       const messageText = `🍲 *Mess Bill Reminder*\n\nHi ${memberName},\nThis is a reminder for your mess bill of ₹${amount} for ${month} at ${messName}.\n\n_PG Buddy App_`;
 
-      const ok = await sendSingleWhatsApp(
+      const ok = await sendCloudFirst(
         memberPhone,
-        "announcement",
-        params,
-        messageText,
+        {
+          def: TEMPLATES.messBillReminder,
+          values: [memberName, formatIndianNumber(Number(amount) || 0), formatPeriod(month) || month, messName],
+        },
         providerCfg,
         fetchFn,
+        () => sendSingleWhatsApp(memberPhone, "announcement", params, messageText, providerCfg, fetchFn),
       );
 
       return jsonResponse({ sent: ok ? 1 : 0, total: 1 }, 200, corsHeaders);

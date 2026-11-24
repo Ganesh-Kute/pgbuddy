@@ -56,6 +56,8 @@ interface PendingMessRow {
 
 interface RentReminderPayload extends PendingPaymentRow {
   reminderType: string;
+  /** yyyy-mm-dd, for the WhatsApp template. */
+  dueDateIso: string;
   titleTemplate: string;
   messageTemplate: (pName: string, room: string, amt: number) => string;
 }
@@ -182,7 +184,7 @@ export function createRentRemindersHandler({
         }
 
         if (reminderType) {
-          rentPayloads.push({ ...p, reminderType, titleTemplate, messageTemplate });
+          rentPayloads.push({ ...p, reminderType, titleTemplate, messageTemplate, dueDateIso: dueDate.toISOString().slice(0, 10) });
         }
       }
 
@@ -252,6 +254,8 @@ export function createRentRemindersHandler({
                       room_number: p.rooms?.room_number ?? "N/A",
                       amount: p.amount,
                       month: currentMonth,
+                      due_date: p.dueDateIso,
+                      reminder_type: p.reminderType,
                     }),
                   });
                   if (!resp.ok) {

@@ -8,7 +8,11 @@
 //                    footer, "Copy code" button (approved 2026-11-22, after Business Verification)
 // Until a template is approved Meta refuses the send, and the caller falls back to the next provider.
 //
+// The text of every template is in whatsapp-templates.ts.
+//
 // Secrets: WHATSAPP_TOKEN (permanent system-user token), WHATSAPP_PHONE_NUMBER_ID.
+
+import { DEFAULT_VALUE_MAX, placeholderCount, TEMPLATES, type TemplateDef } from "./whatsapp-templates.ts";
 
 export const GRAPH_VERSION = "v25.0";
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -157,7 +161,7 @@ export async function sendReceiptDocument(
   return sendTemplate(
     cfg,
     to,
-    "payment_receipt",
+    TEMPLATES.paymentReceipt.name,
     [
       { type: "header", parameters: [{ type: "document", document: { id: mediaId, filename } }] },
       bodyParams([values.tenantName, values.amount, values.period, values.propertyName]),
@@ -166,17 +170,45 @@ export async function sendReceiptDocument(
   );
 }
 
-export function sendRentReminder(
+/**
+ * Any body-only template from whatsapp-templates.ts. The values go in placeholder order; a wrong count
+ * is refused here rather than by Meta.
+ */
+export function sendTextTemplate(
   cfg: CloudConfig,
   to: string,
-  values: { tenantName: string; amount: string; period: string; propertyName: string; dueDate: string },
+  def: TemplateDef,
+  values: string[],
   fetchFn: typeof fetch,
 ): Promise<CloudSendResult> {
+  const expected = placeholderCount(def.body);
+  if (values.length !== expected) {
+    return Promise.resolve({ ok: false, reason: "failed", detail: `${def.name} needs ${expected} values, got ${values.length}` });
+  }
   return sendTemplate(
     cfg,
     to,
-    "rent_reminder",
-    [bodyParams([values.tenantName, values.amount, values.period, values.propertyName, values.dueDate])],
+    def.name,
+    [{
+      type: "body",
+      parameters: values.map((v, i) => ({ type: "text", text: templateText(v, def.valueMax?.[i] ?? DEFAULT_VALUE_MAX) })),
+    }],
+    fetchFn,
+    def.language,
+  );
+}
+
+export function sendRentReminder(
+  cfg: CloudConfig,
+  to: string,
+  values: { tenantName: string; amount: string; period: string; propertyName: string; dueDate: string; overdue?: boolean },
+  fetchFn: typeof fetch,
+): Promise<CloudSendResult> {
+  return sendTextTemplate(
+    cfg,
+    to,
+    values.overdue ? TEMPLATES.rentOverdue : TEMPLATES.rentReminder,
+    [values.tenantName, values.amount, values.period, values.propertyName, values.dueDate],
     fetchFn,
   );
 }
