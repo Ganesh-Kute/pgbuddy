@@ -14,8 +14,8 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
-  const { user, role, isStaff, loading } = useAuth();
-  const decision = guardDecision({ loading, signedIn: !!user, role, isStaff, requiredRole });
+  const { user, role, isStaff, loading, accessFailed } = useAuth();
+  const decision = guardDecision({ loading, signedIn: !!user, role, isStaff, requiredRole, accessFailed });
 
   switch (decision.kind) {
     case "loading":
@@ -24,6 +24,8 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
       return <Navigate to={decision.to} replace />;
     case "no-role":
       return <ChooseRole />;
+    case "access-error":
+      return <AccessError />;
     default:
       return <>{children}</>;
   }
@@ -82,6 +84,33 @@ const ChooseRole = () => {
         <p className="text-xs text-muted-foreground">
           Staff member? Ask your PG owner to invite this phone number, then sign in again.
         </p>
+        <Button variant="ghost" size="sm" onClick={() => signOut()}>
+          Sign out
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+/** The role could not be read (connection or browser trouble): retry, never guess. */
+const AccessError = () => {
+  const { refreshRole, signOut } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const retry = async () => {
+    setBusy(true);
+    await refreshRole();
+    setBusy(false);
+  };
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="w-full max-w-sm space-y-6 text-center">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold">Could not load your account</h1>
+          <p className="text-sm text-muted-foreground">Check your internet connection and try again.</p>
+        </div>
+        <Button size="lg" className="w-full" disabled={busy} onClick={retry}>
+          {busy ? "Trying..." : "Try again"}
+        </Button>
         <Button variant="ghost" size="sm" onClick={() => signOut()}>
           Sign out
         </Button>

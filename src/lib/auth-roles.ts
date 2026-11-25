@@ -31,23 +31,31 @@ export type GuardInput = {
   role: UserRole;
   isStaff: boolean;
   requiredRole?: AppRole;
+  /**
+   * The role could not be read (network error, browser lock timeout, server error). Then role = null
+   * means "unknown", not "none": the account-setup screen must not be shown.
+   */
+  accessFailed?: boolean;
 };
 
 export type GuardDecision =
   | { kind: "loading" }
   | { kind: "render" }
   | { kind: "redirect"; to: string }
-  | { kind: "no-role" };
+  | { kind: "no-role" }
+  | { kind: "access-error" };
 
-export function guardDecision({ loading, signedIn, role, isStaff, requiredRole }: GuardInput): GuardDecision {
+export function guardDecision({ loading, signedIn, role, isStaff, requiredRole, accessFailed }: GuardInput): GuardDecision {
   if (loading) return { kind: "loading" };
   if (!signedIn) return { kind: "redirect", to: "/auth" };
   if (!requiredRole) return { kind: "render" };
   if (requiredRole === "owner" && (role === "owner" || isStaff)) return { kind: "render" };
   if (requiredRole === "tenant" && role === "tenant") return { kind: "render" };
   const home = homeFor(role, isStaff);
+  // The role could not be read: offer a retry. A tenant on a phone browser was shown "Finish setting
+  // up your account" because a failed read was taken for "no role" (2026-11-25).
   // No role at all: say so, rather than bouncing between /dashboard and /tenant.
-  if (!home) return { kind: "no-role" };
+  if (!home) return accessFailed ? { kind: "access-error" } : { kind: "no-role" };
   return { kind: "redirect", to: home };
 }
 
