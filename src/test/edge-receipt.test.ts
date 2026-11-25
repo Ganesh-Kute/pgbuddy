@@ -569,6 +569,16 @@ describe("every WhatsApp message goes through its approved template first", () =
     expect(bulk).toBeTruthy();
   });
 
+  it("complaint alert goes only to the owner and staff, never back to the tenant who raised it", async () => {
+    const t = setup({ cloud: { messages: SENT } });
+    const resp = await t.call(TENANT_A, {
+      action: "send-complaint-alert", property_id: "prop-1", title: "Tap leaking", category: "Plumbing",
+      tenant_name: "Ravi Kumar", room_number: "104", tenant_phone: "9876543210",
+    });
+    expect(await resp.json()).toMatchObject({ sent: 1, total: 1 });
+    expect(sentTemplates(t.calls).map((m) => m.to)).toEqual(["919000000001"]);
+  });
+
   it("does not retry elsewhere when the number is not on WhatsApp", async () => {
     const t = setup({ cloud: { messages: { status: 400, body: { error: { code: 131026, message: "Message undeliverable" } } } } });
     const resp = await t.call(OWNER, cases[2].body);

@@ -881,7 +881,8 @@ export function createTwilioNotificationsHandler({
         const category = asStr(payload.category, "General");
         const tenantName = asStr(payload.tenant_name, "A tenant");
         const roomNumber = asStr(payload.room_number, "N/A");
-        const tenantPhone = asStr(payload.tenant_phone).trim();
+        // Only the owner and staff are told. The tenant who raised it sees it in the app and gets no
+        // WhatsApp message (any tenant_phone in the request is ignored).
 
         const { data: property } = await supabase
           .from("properties")
@@ -940,7 +941,6 @@ export function createTwilioNotificationsHandler({
           ...(ownerPhone ? [{ phone: ownerPhone }] : []),
           ...managerPhones,
           ...invitedPhones,
-          ...(tenantPhone ? [{ phone: tenantPhone }] : []),
         ];
 
         const seenRaw = new Set<string>();
