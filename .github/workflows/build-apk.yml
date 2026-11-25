@@ -9,6 +9,9 @@ on:
       white_label:
         description: "\"true\" shows app_name and public/custom-logo.png instead of PG Buddy"
         default: "true"
+      brand_theme:
+        description: "Colour theme (\"mauli\" = blue and gold; empty = PG Buddy purple)"
+        default: "mauli"
   push:
     tags:
       - "v*"            # Auto-build on version tags like v1.0.0
@@ -52,6 +55,7 @@ jobs:
           # the website (Vercel) never sets these and stays PG Buddy.
           VITE_APP_NAME: ${{ inputs.app_name || vars.VITE_APP_NAME }}
           VITE_IS_WHITE_LABEL: ${{ inputs.white_label || vars.VITE_IS_WHITE_LABEL }}
+          VITE_BRAND_THEME: ${{ inputs.brand_theme || vars.VITE_BRAND_THEME }}
         run: npm run build -- --mode native
 
       - name: Setup Java JDK 21

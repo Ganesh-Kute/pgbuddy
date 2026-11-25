@@ -4,7 +4,7 @@ import { CheckCircle, Download, FileText, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { buildReceipt, formatIndianNumber } from "@/lib/receipt";
-import { getAppName } from "@/lib/branding";
+import { getAppName, getBrandColors } from "@/lib/branding";
 
 export interface ReceiptProps {
   payment: {
@@ -91,7 +91,7 @@ const RentReceipt = ({
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; padding: 32px; max-width: 760px; margin: 0 auto; color: #0f172a; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 28px; }
-    .brand { font-size: 22px; font-weight: 700; color: #7c3aed; }
+    .brand { font-size: 22px; font-weight: 700; color: ${getBrandColors().primary}; }
     .brand-sub { font-size: 12px; color: #64748b; margin-top: 4px; }
     .title-area { text-align: right; }
     .title-area h1 { font-size: 18px; margin: 0 0 6px 0; }
@@ -108,7 +108,7 @@ const RentReceipt = ({
     th { background: #f8fafc; font-size: 12px; text-transform: uppercase; color: #334155; }
     th.right, td.right { text-align: right; font-weight: 700; }
     tr.total td { background: #f8fafc; font-weight: 700; }
-    tr.total td.right { font-size: 18px; color: #7c3aed; }
+    tr.total td.right { font-size: 18px; color: ${getBrandColors().primary}; }
     .words { font-size: 12px; color: #475569; margin-bottom: 20px; }
     .tx { background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 16px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
     .badge { background: #dcfce7; color: #166534; padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; }

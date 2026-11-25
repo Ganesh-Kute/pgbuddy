@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { getBrandColors } from "@/lib/branding";
 
 const ThemeToggle = ({ className }: { className?: string }) => {
   const { resolvedTheme, theme, setTheme } = useTheme();
@@ -10,7 +11,8 @@ const ThemeToggle = ({ className }: { className?: string }) => {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) {
-      meta.setAttribute("content", activeTheme === "dark" ? "#0d0a16" : "#7c3aed");
+      const colors = getBrandColors();
+      meta.setAttribute("content", activeTheme === "dark" ? colors.dark : colors.primary);
     }
   }, [activeTheme]);
 
