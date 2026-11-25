@@ -79,6 +79,9 @@ export default defineConfig(({ mode }) => {
             globPatterns: ["**/*.{js,css,html,ico,svg,woff2}", "pwa-icon-*.png"],
             globIgnores: ["pg-buddy.apk", "og-image.png"],
             navigateFallbackDenylist: [/^\/~oauth/],
+            // Push-notification handlers. One worker per scope: a separately registered sw-push.js
+            // replaced this worker on every visit (and was replaced by it), see src/main.tsx.
+            importScripts: ["sw-push.js"],
             // No API caching: the old rule pointed at a previous Supabase project, so it never matched
             // the live one. Cached API answers would also be per-user data kept on the device.
           },

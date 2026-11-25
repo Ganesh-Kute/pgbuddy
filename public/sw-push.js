@@ -1,5 +1,6 @@
-// Custom service worker for push notifications
-// This file is separate from the vite-pwa generated SW
+// Push-notification handlers, loaded into the generated service worker (sw.js) with importScripts;
+// see workbox.importScripts in vite.config.ts. Do not register this file as a worker of its own:
+// two workers for the same scope replace each other.
 
 self.addEventListener("push", (event) => {
   if (!event.data) return;
