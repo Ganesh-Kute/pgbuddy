@@ -170,7 +170,7 @@ describe("before the payment security migration (proves the checks below can fai
     const db = await makeDb(false);
     expect((await as(db, STRANGER, plantUpi)).error).toBeNull();
     expect(await tenantPayScreen(db)).toBe("fraud@ybl");
-  });
+  }, 60_000); // starts its own PGlite; on a busy CI runner that alone can take over 5 s
 });
 
 describe("payment security", () => {
