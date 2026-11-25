@@ -1,6 +1,6 @@
 {
   "appId": "com.pgbuddy.manager",
-  "appName": "PG Buddy",
+  "appName": "Mauli PG",
   "webDir": "dist",
   "server": {
     "androidScheme": "https",

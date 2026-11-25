@@ -53,26 +53,13 @@ function getTomlSection(toml: string, sectionHeader: string): string {
   return nextSection === -1 ? rest : rest.slice(0, nextSection);
 }
 
-// send-sms-otp in this repository is the version running in production (v116, deployed 2026-03-28).
-// The hardened rewrite on claude/laughing-planck-fp6j8g was never deployed: it requires a
-// SEND_SMS_HOOK_SECRET the project does not have, so deploying it would stop OTP login.
-// Until a fixed version is deployed, S5 and S8 leave send-sms-otp out, and the KNOWN GAP test below
-// pins its two holes so the exclusion cannot outlive the fix unnoticed.
-const SEND_SMS_OTP_IS_LIVE_V116 = "send-sms-otp";
-
 describe("Track B static & config security invariants", () => {
-  it("KNOWN GAP: live send-sms-otp (v116) still has the leaked fallback secret and wildcard CORS", () => {
-    // When a fixed send-sms-otp lands this test fails on purpose: delete it, delete
-    // SEND_SMS_OTP_IS_LIVE_V116, and add send-sms-otp back to S5's targets.
-    const src = fs.readFileSync(path.join(ROOT, "supabase/functions", SEND_SMS_OTP_IS_LIVE_V116, "index.ts"), "utf8");
-    expect(src).toContain("pg_buddy_whatsapp_secret_2024");
-    expect(src).toMatch(/Access-Control-Allow-Origin["'\s:]+\*/);
-  });
-
   it("S5: no edge function or whatsapp-server file contains the leaked fallback secret", () => {
     const targets = [
       "supabase/functions/twilio-notifications/index.ts",
       "supabase/functions/twilio-notifications/handler.ts",
+      "supabase/functions/send-sms-otp/index.ts",
+      "supabase/functions/send-sms-otp/handler.ts",
       "whatsapp-server/server.js",
       "whatsapp-server/campaign-worker.js",
       "whatsapp-server/.env.example",
@@ -86,8 +73,7 @@ describe("Track B static & config security invariants", () => {
   it("S8: no edge function sets wildcard Access-Control-Allow-Origin: * or uses !== on signatures", () => {
     const fnDirs = fs
       .readdirSync(path.join(ROOT, "supabase/functions"))
-      .filter((d) => !d.startsWith("_") && fs.statSync(path.join(ROOT, "supabase/functions", d)).isDirectory())
-      .filter((d) => d !== SEND_SMS_OTP_IS_LIVE_V116);
+      .filter((d) => !d.startsWith("_") && fs.statSync(path.join(ROOT, "supabase/functions", d)).isDirectory());
     expect(fnDirs.length).toBeGreaterThanOrEqual(7);
     for (const dir of fnDirs) {
       const files = fs.readdirSync(path.join(ROOT, "supabase/functions", dir)).filter((f) => f.endsWith(".ts"));
@@ -547,8 +533,7 @@ describe("S3: push-notifications, rent-reminders, webhook signatures, and twilio
     ).toBe(false);
   });
 
-  // Standard Webhooks check from _shared/security.ts (deployed in every function bundle except
-  // send-sms-otp). The send-sms-otp hardening will need it; no live function calls it yet.
+  // Standard Webhooks check from _shared/security.ts, used by send-sms-otp to accept only Supabase Auth.
   it("verifyStandardWebhookSignature accepts a valid v1 signature and rejects unsigned, stale, tampered and wrong-key requests", async () => {
     const rawSecret = "hook-hmac-secret-32-bytes-minimum";
     const whsec = "v1,whsec_" + Buffer.from(rawSecret).toString("base64");

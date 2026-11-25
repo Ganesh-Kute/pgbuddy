@@ -6,6 +6,7 @@ import { clampLines, ellipsize, pdfText, renderReceiptPdf, wrapText } from "../.
 import { inflateSync } from "node:zlib";
 import { bytesToBase64, RECEIPT_SEND_LOG } from "../../supabase/functions/twilio-notifications/receipt.ts";
 import { createTwilioNotificationsHandler } from "../../supabase/functions/twilio-notifications/handler.ts";
+import { placeholderCount, TEMPLATES } from "../../supabase/functions/_shared/whatsapp-templates.ts";
 
 const OWNER = "00000000-0000-4000-8000-000000000001";
 const TENANT_A = "00000000-0000-4000-8000-00000000000a";
@@ -469,3 +470,109 @@ describe("official WhatsApp Cloud API (Meta) first, then the fallbacks", () => {
   });
 });
 
+
+describe("every WhatsApp message goes through its approved template first", () => {
+  const SENT = { status: 200, body: { messages: [{ id: "wamid.1" }] } };
+  type Msg = { to: string; template: { name: string; components: { type: string; parameters: { text: string }[] }[] } };
+  const sentTemplates = (calls: Call[]) =>
+    calls.filter((c) => c.url.endsWith("/messages")).map((c) => c.body as unknown as Msg);
+  const values = (m: Msg) => m.template.components[0].parameters.map((p) => p.text);
+  const byName = Object.fromEntries(Object.values(TEMPLATES).map((d) => [d.name, d]));
+
+  const cases: Array<{ what: string; caller: string; body: Record<string, unknown>; template: string; to: string[]; values: string[] }> = [
+    {
+      what: "automatic overdue rent reminder (name looked up, ISO due date formatted)",
+      caller: OWNER,
+      body: { action: "send-rent-reminder", tenant_ids: [TENANT_A], tenant_phone: "9876543210", amount: 8500, month: "2026-12", property_name: "Sunrise PG", due_date: "2026-12-05", reminder_type: "overdue" },
+      template: "rent_overdue",
+      to: ["919876543210"],
+      values: ["Ravi Kumar", "8,500.00", "Dec 2026", "Sunrise PG", "05 Dec 2026"],
+    },
+    {
+      what: "announcement to every tenant of the property",
+      caller: OWNER,
+      body: { action: "send-announcement", property_id: "prop-1", property_name: "Sunrise PG", title: "Water supply", content: "Off on Sunday 10-1." },
+      template: "pg_notice",
+      to: ["919876543210", "919123456789"],
+      values: ["Sunrise PG", "Water supply", "Off on Sunday 10-1."],
+    },
+    {
+      what: "welcome message",
+      caller: OWNER,
+      body: { action: "send-welcome-message", tenant_phone: "9876543210", tenant_name: "Ravi Kumar", property_name: "Sunrise PG", room_number: "104" },
+      template: "tenant_welcome",
+      to: ["919876543210"],
+      values: ["Ravi Kumar", "Sunrise PG", "104"],
+    },
+    {
+      what: "complaint alert to the owner",
+      caller: TENANT_A,
+      body: { action: "send-complaint-alert", property_id: "prop-1", title: "Tap leaking", category: "Plumbing", tenant_name: "Ravi Kumar", room_number: "104" },
+      template: "complaint_alert",
+      to: ["919000000001"],
+      values: ["Sunrise PG", "Ravi Kumar", "104", "Plumbing", "Tap leaking"],
+    },
+    {
+      what: "move-out alert to the owner",
+      caller: TENANT_A,
+      body: { action: "send-vacancy-alert", property_id: "prop-1", tenant_name: "Ravi Kumar", expected_move_out: "2026-12-31" },
+      template: "vacancy_alert",
+      to: ["919000000001"],
+      values: ["Sunrise PG", "Ravi Kumar", "31 Dec 2026"],
+    },
+    {
+      what: "payment proof submitted, to the owner",
+      caller: TENANT_A,
+      body: { action: "send-payment-approval", property_id: "prop-1", tenant_name: "Ravi Kumar", room_number: "104", amount: 8500, month: "2026-11" },
+      template: "payment_proof_submitted",
+      to: ["919000000001"],
+      values: ["Sunrise PG", "Ravi Kumar", "104", "8,500.00", "Nov 2026"],
+    },
+    {
+      what: "mess bill reminder",
+      caller: OWNER,
+      body: { action: "send-mess-reminder", member_phone: "9555500000", member_name: "Asha", amount: 3200, month: "2026-11", mess_name: "Sunrise Mess" },
+      template: "mess_bill_reminder",
+      to: ["919555500000"],
+      values: ["Asha", "3,200.00", "Nov 2026", "Sunrise Mess"],
+    },
+  ];
+
+  for (const c of cases) {
+    it(c.what, async () => {
+      const t = setup({ cloud: { messages: SENT } });
+      const resp = await t.call(c.caller, c.body);
+      expect(resp.status).toBe(200);
+      expect(await resp.json()).toMatchObject({ sent: c.to.length });
+      const msgs = sentTemplates(t.calls);
+      expect(msgs.map((m) => m.to)).toEqual(c.to);
+      for (const m of msgs) {
+        expect(m.template.name).toBe(c.template);
+        expect(values(m)).toEqual(c.values);
+        // The count Meta approved, so Meta cannot refuse the message for a wrong number of values.
+        expect(values(m)).toHaveLength(placeholderCount(byName[c.template].body));
+      }
+      expect(t.calls.some((x) => x.url.includes("wa.pgbuddy.example"))).toBe(false);
+    });
+  }
+
+  it("falls back to the WhatsApp server while a template is not approved, for one message and for many", async () => {
+    const notReady = { status: 400, body: { error: { code: 132001, message: "Template name does not exist in the translation" } } };
+    const t = setup({ cloud: { messages: notReady } });
+    await t.call(OWNER, cases[2].body);
+    expect(t.calls.map((c) => c.url).filter((u) => u.includes("wa.pgbuddy.example"))).toEqual(["https://wa.pgbuddy.example/api/send-instant"]);
+
+    const t2 = setup({ cloud: { messages: notReady } });
+    const resp = await t2.call(OWNER, cases[1].body);
+    expect(await resp.json()).toMatchObject({ total: 2 });
+    const bulk = t2.calls.find((c) => c.url.endsWith("/api/bulk-message"));
+    expect(bulk).toBeTruthy();
+  });
+
+  it("does not retry elsewhere when the number is not on WhatsApp", async () => {
+    const t = setup({ cloud: { messages: { status: 400, body: { error: { code: 131026, message: "Message undeliverable" } } } } });
+    const resp = await t.call(OWNER, cases[2].body);
+    expect(await resp.json()).toMatchObject({ sent: 0 });
+    expect(t.calls.some((x) => x.url.includes("wa.pgbuddy.example"))).toBe(false);
+  });
+});
