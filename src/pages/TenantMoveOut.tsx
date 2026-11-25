@@ -12,6 +12,7 @@ import TenantLayout from "@/components/dashboard/TenantLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { format } from "date-fns";
 
 interface Assignment {
@@ -51,6 +52,7 @@ const checklistLabels: Record<string, string> = {
 
 const TenantMoveOut = () => {
   const { user } = useAuth();
+  const { send: sendWhatsApp } = useWhatsAppNotify();
   const { toast } = useToast();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [existingRequest, setExistingRequest] = useState<MoveOutRequest | null>(null);
@@ -114,6 +116,12 @@ const TenantMoveOut = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Move-out request submitted", description: "Your PG owner will process your checkout." });
+      // WhatsApp alert to the owner and managers (non-blocking), as the Vacancy Notices screen does.
+      void sendWhatsApp("send-vacancy-alert", {
+        property_id: assignment.property_id,
+        tenant_name: user?.user_metadata?.full_name || user?.phone || "A tenant",
+        expected_move_out: moveOutDate,
+      });
       // Refresh
       const { data: req } = await supabase
         .from("move_out_requests")
