@@ -1,4 +1,5 @@
 import { Helmet } from "react-helmet-async";
+import { getAppName } from "@/lib/branding";
 
 interface SEOHeadProps {
   title?: string;
@@ -9,7 +10,7 @@ interface SEOHeadProps {
   jsonLd?: object;
 }
 
-const SITE_NAME = "PG Buddy";
+const SITE_NAME = getAppName();
 const DEFAULT_DESC = "Complete PG management platform for property owners and tenants. Manage properties, rooms, rent payments, complaints and more.";
 const BASE_URL = "https://pgbuddy.lovable.app";
 const DEFAULT_OG = "https://pgbuddy.lovable.app/og-image.png";

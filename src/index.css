@@ -301,3 +301,79 @@
   }
 
 }
+
+/* Mauli PG app theme (VITE_BRAND_THEME=mauli, Android build only): the navy and royal blue of the
+   logo for actions and headers, its gold and marigold orange for highlights. html.theme-* outranks
+   :root and .dark, so only these tokens change; every component keeps working through the tokens.
+   Deliberately outside @layer: Tailwind drops @layer rules whose class never appears literally in the
+   source, and "theme-mauli" is built at runtime from VITE_BRAND_THEME (src/lib/branding.ts). */
+html.theme-mauli {
+  --background: 214 60% 99%;
+  --foreground: 218 60% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 218 60% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 218 60% 12%;
+  --primary: 214 88% 32%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 42 95% 52%;
+  --secondary-foreground: 218 70% 14%;
+  --muted: 214 30% 96%;
+  --muted-foreground: 216 15% 40%;
+  --accent: 28 90% 52%;
+  --accent-foreground: 218 70% 14%;
+  --border: 214 30% 89%;
+  --input: 214 30% 89%;
+  --ring: 42 95% 52%;
+  --gradient-primary: linear-gradient(135deg, hsl(216 90% 24%) 0%, hsl(208 90% 38%) 100%);
+  --gradient-accent: linear-gradient(135deg, hsl(45 96% 56%) 0%, hsl(26 90% 52%) 100%);
+  --gradient-hero: linear-gradient(135deg, hsl(214 88% 32% / 0.08) 0%, hsl(42 95% 52% / 0.10) 60%, hsl(28 90% 52% / 0.05) 100%);
+  --gradient-subtle: linear-gradient(135deg, hsl(214 88% 32% / 0.03) 0%, hsl(42 95% 52% / 0.06) 100%);
+  --shadow-sm: 0 2px 8px -2px hsl(214 88% 32% / 0.1);
+  --shadow-md: 0 8px 24px -4px hsl(214 88% 32% / 0.12);
+  --shadow-lg: 0 16px 48px -8px hsl(214 88% 32% / 0.18);
+  --shadow-glow: 0 0 40px hsl(42 95% 52% / 0.35);
+  --shadow-card-hover: 0 4px 16px hsl(214 88% 32% / 0.1), 0 8px 32px hsl(214 88% 32% / 0.08);
+  --sidebar-background: 214 40% 98%;
+  --sidebar-foreground: 218 30% 22%;
+  --sidebar-primary: 214 88% 32%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 42 90% 94%;
+  --sidebar-accent-foreground: 218 60% 14%;
+  --sidebar-border: 214 30% 89%;
+  --sidebar-ring: 42 95% 52%;
+}
+
+html.theme-mauli.dark {
+  --background: 220 55% 6%;
+  --foreground: 210 30% 95%;
+  --card: 220 50% 9%;
+  --card-foreground: 210 30% 95%;
+  --popover: 220 50% 9%;
+  --popover-foreground: 210 30% 95%;
+  --primary: 212 85% 44%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 42 95% 55%;
+  --secondary-foreground: 218 70% 12%;
+  --muted: 220 35% 15%;
+  --muted-foreground: 215 15% 65%;
+  --accent: 28 90% 56%;
+  --accent-foreground: 218 70% 12%;
+  --border: 220 35% 18%;
+  --input: 220 35% 18%;
+  --ring: 42 95% 55%;
+  --gradient-primary: linear-gradient(135deg, hsl(212 85% 44%) 0%, hsl(204 85% 40%) 100%);
+  --gradient-accent: linear-gradient(135deg, hsl(45 96% 58%) 0%, hsl(26 90% 55%) 100%);
+  --gradient-hero: linear-gradient(135deg, hsl(212 85% 50% / 0.12) 0%, hsl(42 95% 55% / 0.10) 60%, hsl(28 90% 56% / 0.06) 100%);
+  --gradient-subtle: linear-gradient(135deg, hsl(212 85% 50% / 0.05) 0%, hsl(42 95% 55% / 0.06) 100%);
+  --shadow-glow: 0 0 40px hsl(42 95% 55% / 0.35);
+  --shadow-card-hover: 0 4px 16px hsl(212 85% 50% / 0.15), 0 8px 32px hsl(212 85% 50% / 0.1);
+  --sidebar-background: 220 50% 8%;
+  --sidebar-foreground: 210 30% 95%;
+  --sidebar-primary: 212 85% 44%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 35% 15%;
+  --sidebar-accent-foreground: 210 30% 95%;
+  --sidebar-border: 220 35% 18%;
+  --sidebar-ring: 42 95% 55%;
+}

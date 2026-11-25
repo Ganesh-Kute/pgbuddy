@@ -15,6 +15,7 @@ import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { useSubscriptionPlan } from "@/hooks/useSubscriptionPlan";
 import { MessageSquare } from "lucide-react";
+import { getAppName } from "@/lib/branding";
 
 interface PaymentRow {
   id: string;
@@ -199,7 +200,7 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
       member_name: payment.member_name,
       amount: payment.final_amount,
       month: payment.month,
-      mess_name: "Your PG Buddy Host", 
+      mess_name: getAppName(), 
     });
 
     if (res?.sent) {
@@ -229,7 +230,7 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
         member_name: payment.member_name,
         amount: payment.final_amount,
         month: payment.month,
-        mess_name: "Your PG Buddy Host",
+        mess_name: getAppName(),
       });
       if (res?.sent) sentCount++;
     }
