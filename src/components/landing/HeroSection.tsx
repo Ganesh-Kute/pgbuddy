@@ -92,7 +92,7 @@ const HeroSection = () => {
                       className="w-full sm:w-auto min-h-[48px] text-base px-8 py-6 border-2 hover:bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400 rounded-xl group"
                       asChild
                     >
-                      <a href="/pg-buddy.apk" download>
+                      <a href="/downloads/mauli-pg.apk" download="mauli-pg.apk">
                         <Download className="w-5 h-5 mr-2 group-hover:animate-bounce" />
                         Download App
                       </a>
@@ -130,7 +130,7 @@ const HeroSection = () => {
                       className="w-full sm:w-auto min-h-[48px] text-base px-8 py-6 border-2 hover:bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400 rounded-xl group"
                       asChild
                     >
-                      <a href="/pg-buddy.apk" download>
+                      <a href="/downloads/mauli-pg.apk" download="mauli-pg.apk">
                         <Download className="w-5 h-5 mr-2 group-hover:animate-bounce" />
                         Download App
                       </a>
