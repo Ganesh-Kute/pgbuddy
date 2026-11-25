@@ -4,6 +4,7 @@ import { CheckCircle, Download, FileText, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { buildReceipt, formatIndianNumber } from "@/lib/receipt";
+import { getAppName } from "@/lib/branding";
 
 export interface ReceiptProps {
   payment: {
@@ -117,7 +118,7 @@ const RentReceipt = ({
 <body>
   <div class="header">
     <div>
-      <div class="brand">PG Buddy</div>
+      <div class="brand">${escapeHtml(getAppName())}</div>
       <div class="brand-sub">Digital Receipt Validation</div>
     </div>
     <div class="title-area">
@@ -162,7 +163,7 @@ const RentReceipt = ({
     </div>
     <div class="badge">PAYMENT VERIFIED</div>
   </div>
-  <div class="footer">This is a computer-generated receipt from PG Buddy. No physical signature is required.</div>
+  <div class="footer">This is a computer-generated receipt from ${escapeHtml(getAppName())}. No physical signature is required.</div>
 </body>
 </html>`);
     win.document.close();
@@ -198,7 +199,7 @@ const RentReceipt = ({
         <div className="space-y-4 text-sm">
           <div className="flex items-start justify-between gap-4 pb-3 border-b border-border">
             <div>
-              <p className="font-bold text-primary">PG Buddy</p>
+              <p className="font-bold text-primary">{getAppName()}</p>
               <p className="text-xs text-muted-foreground">Digital Receipt Validation</p>
             </div>
             <div className="text-right">

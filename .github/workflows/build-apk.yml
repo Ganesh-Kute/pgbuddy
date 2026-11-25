@@ -2,6 +2,13 @@ name: Build Android Release
 
 on:
   workflow_dispatch:    # Manual trigger from GitHub UI
+    inputs:
+      app_name:
+        description: "Name shown inside the app (white-label build)"
+        default: "Mauli PG"
+      white_label:
+        description: "\"true\" shows app_name and public/custom-logo.png instead of PG Buddy"
+        default: "true"
   push:
     tags:
       - "v*"            # Auto-build on version tags like v1.0.0
@@ -41,8 +48,10 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
-          VITE_IS_WHITE_LABEL: ${{ vars.VITE_IS_WHITE_LABEL }}
+          # Inputs on a manual run; repository variables on a tag build. Only the app is white-labelled:
+          # the website (Vercel) never sets these and stays PG Buddy.
+          VITE_APP_NAME: ${{ inputs.app_name || vars.VITE_APP_NAME }}
+          VITE_IS_WHITE_LABEL: ${{ inputs.white_label || vars.VITE_IS_WHITE_LABEL }}
         run: npm run build -- --mode native
 
       - name: Setup Java JDK 21

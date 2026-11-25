@@ -6,6 +6,7 @@ import { AppLoadingSkeleton } from "@/components/ui/AppLoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { guardDecision, homeFor, isGoneAccountError, type AppRole } from "@/lib/auth-roles";
+import { getAppName } from "@/lib/branding";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -67,7 +68,7 @@ const ChooseRole = () => {
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="space-y-2">
           <h1 className="text-2xl font-bold">Finish setting up your account</h1>
-          <p className="text-sm text-muted-foreground">How will you use PG Buddy?</p>
+          <p className="text-sm text-muted-foreground">How will you use {getAppName()}?</p>
         </div>
         <div className="grid gap-3">
           <Button size="lg" disabled={!!busy} onClick={() => choose("owner")}>

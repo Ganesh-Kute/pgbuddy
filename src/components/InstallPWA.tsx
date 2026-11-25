@@ -5,6 +5,7 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
+import { getAppName } from "@/lib/branding";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -41,7 +42,7 @@ const InstallPWA = () => {
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === "accepted") {
       setIsInstalled(true);
-      toast({ title: "App installed!", description: "PG Buddy has been added to your home screen" });
+      toast({ title: "App installed!", description: `${getAppName()} has been added to your home screen` });
     }
     setDeferredPrompt(null);
   };
@@ -80,7 +81,7 @@ const InstallPWA = () => {
                   <Smartphone className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm">Install PG Buddy</h3>
+                  <h3 className="font-semibold text-sm">Install {getAppName()}</h3>
                   <p className="text-xs text-muted-foreground">
                     {deferredPrompt
                       ? "Add to your home screen for quick access"

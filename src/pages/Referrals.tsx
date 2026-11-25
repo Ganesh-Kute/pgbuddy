@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { getAppName } from "@/lib/branding";
 
 const Referrals = () => {
   const { user } = useAuth();
@@ -60,7 +61,7 @@ const Referrals = () => {
   const handleShare = () => {
     if (navigator.share) {
       navigator.share({
-        title: "Join PG Buddy",
+        title: `Join ${getAppName()}`,
         text: "Manage your PG business like a pro! Use my referral link to sign up.",
         url: referralLink,
       });

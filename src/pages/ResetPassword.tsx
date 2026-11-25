@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getAppName } from "@/lib/branding";
 
 const ResetPassword = () => {
   const [password, setPassword] = useState("");
@@ -77,7 +78,7 @@ const ResetPassword = () => {
           <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center shadow-md">
             <Building2 className="w-7 h-7 text-primary-foreground" />
           </div>
-          <span className="text-2xl font-bold gradient-text">PG Buddy</span>
+          <span className="text-2xl font-bold gradient-text">{getAppName()}</span>
         </div>
         <Card className="border-border/50 shadow-lg">
           <CardHeader className="text-center">

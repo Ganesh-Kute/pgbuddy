@@ -20,6 +20,7 @@ import { Link } from "react-router-dom";
 import { useSubscriptionGuard } from "@/hooks/useSubscriptionGuard";
 import OverLimitBanner from "@/components/OverLimitBanner";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
+import { getAppName } from "@/lib/branding";
 
 interface TenantAssignment {
   id: string;
@@ -364,7 +365,7 @@ const Tenants = () => {
     
     // Fire welcome message via Edge Function
     if (assignPhone.trim() && propertyId) {
-      const propName = properties.find(p => p.id === propertyId)?.name || "PG Buddy";
+      const propName = properties.find(p => p.id === propertyId)?.name || getAppName();
       const roomNum = rooms.find(r => r.id === roomId)?.room_number || "N/A";
       supabase.functions.invoke("twilio-notifications", {
         body: {
