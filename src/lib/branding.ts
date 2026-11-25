@@ -4,8 +4,6 @@
  * with a client's custom name and logo.
  */
 
-import { BRAND_COLORS } from "./brands";
-
 export const isWhiteLabel = import.meta.env.VITE_IS_WHITE_LABEL === "true";
 
 export const getAppName = (): string => {
@@ -22,6 +20,10 @@ export const getAppLogo = (): string => {
 /** Colour theme for a white-label build ("mauli"), or "" for the PG Buddy colours. */
 export const brandTheme: string = (import.meta.env.VITE_BRAND_THEME ?? "").trim().toLowerCase();
 
+const BRAND_COLORS: Record<string, { primary: string; dark: string }> = {
+  "": { primary: "#7c3aed", dark: "#0d0a16" },
+  mauli: { primary: "#0a4a9a", dark: "#060e1f" },
+};
 
 /** Hex colours for places CSS variables cannot reach (browser bar, printed receipt). */
 export const getBrandColors = () => BRAND_COLORS[brandTheme] ?? BRAND_COLORS[""];

@@ -43,7 +43,6 @@ export const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
   "https://pgbuddy.lovable.app",
   "https://pgbuddy-zeta-rust.vercel.app",
   "https://pgbuddy.getgrm.tech",
-  "https://mauli.getgrm.tech", // Mauli PG web app (iPhone "Add to Home Screen")
   "https://pgbuddy.in",
   "https://www.pgbuddy.in",
   "https://localhost",
