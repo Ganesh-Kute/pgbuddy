@@ -2,7 +2,7 @@ import { ReactNode, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { signOutRemovedAccount } from "@/lib/account-removed";
-import { AppLoadingSkeleton } from "@/components/ui/AppLoadingSkeleton";
+import { AuthWaitScreen } from "@/components/ui/AppLoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { guardDecision, homeFor, isGoneAccountError, type AppRole } from "@/lib/auth-roles";
@@ -19,7 +19,7 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
 
   switch (decision.kind) {
     case "loading":
-      return <AppLoadingSkeleton />;
+      return <AuthWaitScreen />;
     case "redirect":
       return <Navigate to={decision.to} replace />;
     case "no-role":

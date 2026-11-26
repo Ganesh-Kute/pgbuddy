@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { isGoneAccountError, resolveRole, type UserRole } from "@/lib/auth-roles";
 import { AccountGoneError, signOutRemovedAccount } from "@/lib/account-removed";
+import { forgetSavedLogin, restartAt } from "@/lib/savedLogin";
 
 export type { UserRole } from "@/lib/auth-roles";
 
@@ -16,9 +17,12 @@ interface AuthContextType {
   accessFailed: boolean;
   /** True until both the session and, for a signed-in user, their role are known. */
   loading: boolean;
-  signOut: () => Promise<void>;
+  /** `local`: end the login on this device only (works with no network). */
+  signOut: (options?: { local?: boolean }) => Promise<void>;
   /** Re-read the role, e.g. after the user picks one on the account-setup screen. */
   refreshRole: () => Promise<void>;
+  /** Read the saved login again (the loading screen's Retry while it is not known yet). */
+  recheckSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -30,20 +34,43 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signOut: async () => {},
   refreshRole: async () => {},
+  recheckSession: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 type Access = { userId: string; role: UserRole; isStaff: boolean; failed: boolean };
 
+/** How long "Sign in again" waits for Supabase's own sign-out before clearing the login itself. */
+export const LOCAL_SIGN_OUT_WAIT_MS = 3000;
+
 /** Waits before each retry of the role read: a dropped connection or a busy login lock usually clears. */
 const RETRY_DELAYS_MS = [400, 1200, 2500];
 
 
 async function loadAccess(user: User): Promise<Access> {
-  // Link a pending staff invitation for this account first, so the staff lookup below sees it.
-  const { error: claimError } = await supabase.rpc("claim_staff_invitation");
-  if (claimError) console.error("claim_staff_invitation failed:", claimError.message);
+  // Link a pending staff invitation for this account, so the staff lookup sees it. Only that lookup
+  // waits for it: the sign-in check and the role read start at once (it used to cost every app open
+  // one extra round trip before anything, measured by agent-1 on 26 Nov).
+  // A claim that could not reach the server fails the staff read, so it is retried and then reported
+  // as failed: a new staff member was otherwise sent to "choose your role" (Antigravity's review).
+  // A database error is logged and ignored as before, so a broken function cannot lock anyone out.
+  const claim = async (): Promise<{ message: string } | null> => {
+    try {
+      const { error } = await supabase.rpc("claim_staff_invitation");
+      if (!error) return null;
+      console.error("claim_staff_invitation failed:", error.message);
+      return error.code ? null : error; // PostgREST gives network failures no code
+    } catch (err) {
+      console.error("claim_staff_invitation failed:", err);
+      return { message: String(err) };
+    }
+  };
+  const readStaff = async () => {
+    const claimError = await claim();
+    if (claimError) return { data: null, error: claimError };
+    return supabase.from("staff_members").select("id").eq("staff_user_id", user.id).eq("status", "active").limit(1);
+  };
 
   const read = () =>
     Promise.all([
@@ -52,12 +79,7 @@ async function loadAccess(user: User): Promise<Access> {
       supabase.auth.getUser(),
       // Every row, not .maybeSingle(): a user with two roles used to come back as an error, then as no role.
       supabase.from("user_roles").select("role").eq("user_id", user.id),
-      supabase
-        .from("staff_members")
-        .select("id")
-        .eq("staff_user_id", user.id)
-        .eq("status", "active")
-        .limit(1),
+      readStaff(),
     ]);
 
   // A failed read is retried, and if it keeps failing it is reported as failed, never as "no role":
@@ -135,10 +157,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (user) await fetchAccess(user);
   }, [user, fetchAccess]);
 
-  const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setAccess(null);
+  const recheckSession = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    setSession(data.session);
+    setSessionKnown(true);
+  }, []);
+
+  // A normal sign-out also ends the login on the server. With no network that call fails and Supabase
+  // then KEEPS the login on the device, so fall back to a local sign-out; `local` skips the server.
+  const signOut = useCallback(async (options?: { local?: boolean }) => {
+    if (options?.local) {
+      // Supabase's sign-out can wait forever for a lock held by a request on a dead network.
+      const finished = await Promise.race([
+        supabase.auth.signOut({ scope: "local" }).then(
+          ({ error }) => !error,
+          () => false,
+        ),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), LOCAL_SIGN_OUT_WAIT_MS)),
+      ]);
+      if (!finished) {
+        forgetSavedLogin();
+        restartAt("/auth");
+        return;
+      }
+      request.current++;
+      setSession(null);
+      setAccess(null);
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) await supabase.auth.signOut({ scope: "local" });
+    } catch (err) {
+      console.error("Sign-out failed; clearing the login on this device:", err);
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+    } finally {
+      request.current++;
+      setSession(null);
+      setAccess(null);
+    }
   }, []);
 
   // Until the role for THIS user has arrived, report loading. A just-signed-in user used to be seen
@@ -153,6 +210,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loading: !sessionKnown || !accessReady,
     signOut,
     refreshRole,
+    recheckSession,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

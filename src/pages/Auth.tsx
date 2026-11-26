@@ -10,6 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getAppName, getAppLogo, isWhiteLabel } from "@/lib/branding";
 import { ACCOUNT_REMOVED_FLAG, homeFor } from "@/lib/auth-roles";
+import { AuthWaitScreen } from "@/components/ui/AppLoadingSkeleton";
+import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
@@ -24,6 +26,8 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, role: userRole, isStaff, loading: authLoading } = useAuth();
+  // Usually known within milliseconds; a saved login whose token must be refreshed can take longer.
+  const slowToKnowSession = useDelayedFlag(authLoading && !user, 200);
 
   // The one place a signed-in user leaves this page: once their role is known, to their own home.
   // With no role yet, /dashboard's guard shows the account-setup screen instead of bouncing.
@@ -89,6 +93,12 @@ const Auth = () => {
       setLoading(false);
     }
   };
+
+  // A saved login (or one just made) is being read: show the loading screen, never the form, so the
+  // app does not flash the sign-in page before the dashboard (Ganesh, APK, 26 Nov 2026).
+  if (user) return <AuthWaitScreen />;
+  // Not known yet whether a login is saved: draw nothing for a moment, then the loading screen.
+  if (authLoading) return slowToKnowSession ? <AuthWaitScreen /> : <div className="min-h-screen bg-background" aria-busy="true" />;
 
   if (mode === "signup") {
     // ----------------------------------------------------

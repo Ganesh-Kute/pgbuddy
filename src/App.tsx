@@ -6,6 +6,8 @@ import { Suspense } from "react";
 import { lazyWithReload } from "@/lib/staleBuild";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLoadingSkeleton } from "@/components/ui/AppLoadingSkeleton";
+import { TopProgressBar } from "@/components/TopProgressBar";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { ThemeProvider } from "next-themes";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/hooks/useAuth";
@@ -95,6 +97,8 @@ const App = () => (
           <TooltipProvider>
           <Toaster />
           <Sonner />
+          <TopProgressBar />
+          <OfflineBanner />
           <BrowserRouter>
             <Suspense fallback={<AppLoadingSkeleton />}>
             <Routes>
