@@ -31,6 +31,7 @@ const AboutUs = () => (
       <li><strong>Registered name:</strong> {BUSINESS.legalName}</li>
       <li><strong>Udyam Registration No.:</strong> {BUSINESS.udyamNumber} (Ministry of MSME, Government of India)</li>
       <li><strong>Location:</strong> {BUSINESS.locality}</li>
+      <li><strong>Brands:</strong> PG Buddy, <a href="/mauli-pg" className="text-primary hover:underline">Mauli PG</a></li>
       <li>
         <strong>WhatsApp:</strong>{" "}
         <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{BUSINESS.whatsappDisplay}</a>
