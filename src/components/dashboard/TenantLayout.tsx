@@ -183,7 +183,7 @@ const TenantLayout = ({ children }: { children: React.ReactNode }) => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-64 pt-[calc(3.5rem+env(safe-area-inset-top,0px))] lg:pt-0 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
+      <main className="flex-1 min-w-0 lg:ml-64 pt-[calc(3.5rem+env(safe-area-inset-top,0px))] lg:pt-0 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
         <div className="p-4 sm:p-6 lg:p-8 page-enter">
           {children}
         </div>

@@ -222,12 +222,12 @@ const ManageListing = () => {
             <h1 className="text-2xl font-bold">Manage Listing</h1>
             <p className="text-muted-foreground">Photos, video tour & enquiries for your properties</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
             <Badge variant="outline" className="text-xs gap-1">
               <Crown className="w-3 h-3" /> {limits.name} Plan
             </Badge>
             <Select value={selectedProperty} onValueChange={setSelectedProperty}>
-              <SelectTrigger className="w-[220px]"><SelectValue placeholder="Select property" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder="Select property" /></SelectTrigger>
               <SelectContent>
                 {properties.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
@@ -239,7 +239,7 @@ const ManageListing = () => {
         {selectedProperty && isBusiness && (
           <Alert className={`cursor-pointer transition-colors ${currentProp?.is_featured ? "border-warning/50 bg-warning/5" : "border-border"}`} onClick={toggleFeatured}>
             <Crown className={`w-4 h-4 ${currentProp?.is_featured ? "text-warning" : "text-muted-foreground"}`} />
-            <AlertDescription className="flex items-center justify-between">
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm">
                 {currentProp?.is_featured ? "This property is marked as Featured — it gets a badge and priority on the browse page." : "Click to mark this property as Featured for higher visibility."}
               </span>
@@ -306,13 +306,13 @@ const ManageListing = () => {
                       {photo.is_cover && (
                         <Badge className="absolute top-2 left-2 text-[10px]">Cover</Badge>
                       )}
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <div className="absolute inset-0 bg-transparent [@media(hover:hover)]:bg-black/50 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-end justify-end p-2 gap-1.5 [&>button]:shadow-sm [@media(hover:hover)]:items-center [@media(hover:hover)]:justify-center [@media(hover:hover)]:gap-2">
                         {!photo.is_cover && (
                           <Button size="sm" variant="secondary" className="text-xs" onClick={() => setCover(photo)}>
                             Set Cover
                           </Button>
                         )}
-                        <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => deletePhoto(photo)}>
+                        <Button size="icon" variant="destructive" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8" onClick={() => deletePhoto(photo)}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -359,7 +359,7 @@ const ManageListing = () => {
             <TabsContent value="enquiries" className="space-y-4 mt-4">
               {/* Analytics bar (Business only) */}
               {isBusiness && totalCount > 0 && (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <Card>
                     <CardContent className="pt-4 pb-4 text-center">
                       <p className="text-2xl font-bold">{totalCount}</p>

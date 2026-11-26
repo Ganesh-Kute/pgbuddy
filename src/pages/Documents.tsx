@@ -78,14 +78,14 @@ const Documents = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">Tenant Documents</h1>
             <p className="text-muted-foreground">Review and verify tenant ID proofs & agreements</p>
           </div>
           {properties.length > 1 && (
             <Select value={selectedProp} onValueChange={setSelectedProp}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="Filter" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Filter" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Properties</SelectItem>
                 {properties.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
@@ -108,17 +108,17 @@ const Documents = () => {
           <div className="space-y-3">
             {filtered.map(d => (
               <Card key={d.id}>
-                <CardContent className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-4">
-                    <FileText className="w-5 h-5 text-primary" />
-                    <div>
-                      <p className="font-medium">{docTypeLabels[d.document_type] || d.document_type}</p>
-                      <p className="text-sm text-muted-foreground">
+                <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <FileText className="w-5 h-5 text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{docTypeLabels[d.document_type] || d.document_type}</p>
+                      <p className="text-sm text-muted-foreground break-words">
                         {d.document_name} · {d.properties?.name} · {new Date(d.created_at).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       variant="ghost"

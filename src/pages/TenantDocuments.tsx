@@ -134,7 +134,7 @@ const TenantDocuments = () => {
   return (
     <TenantLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">My Documents</h1>
             <p className="text-muted-foreground">Upload and manage your ID proofs & agreements</p>
@@ -190,10 +190,10 @@ const TenantDocuments = () => {
           <div className="space-y-3">
             {docs.map(d => (
               <Card key={d.id}>
-                <CardContent className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-4">
-                    <FileText className="w-5 h-5 text-primary" />
-                    <div>
+                <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <FileText className="w-5 h-5 text-primary shrink-0" />
+                    <div className="min-w-0">
                       <p className="font-medium">{docTypes.find(t => t.value === d.document_type)?.label || d.document_type}</p>
                       <p className="text-sm text-muted-foreground">{d.document_name} · {new Date(d.created_at).toLocaleDateString()}</p>
                       {d.notes && <p className="text-xs text-muted-foreground mt-1">Note: {d.notes}</p>}
