@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface StaffMember {
   id: string;
@@ -243,7 +244,7 @@ const StaffManagement = () => {
 
         {/* Staff list */}
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : staff.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

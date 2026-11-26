@@ -8,6 +8,7 @@ import TenantLayout from "@/components/dashboard/TenantLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Separator } from "@/components/ui/separator";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Assignment {
   id: string;
@@ -83,7 +84,7 @@ const TenantDashboard = () => {
   if (loading) {
     return (
       <TenantLayout>
-        <p className="text-muted-foreground">Loading...</p>
+        <DelayedPageSkeleton variant="cards" count={4} />
       </TenantLayout>
     );
   }

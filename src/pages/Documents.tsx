@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { openStorageFile } from "@/lib/storage-files";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface TenantDoc {
   id: string;
@@ -95,7 +96,7 @@ const Documents = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : filtered.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

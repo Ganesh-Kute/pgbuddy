@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { StorageFileLink } from "@/components/StorageFileLink";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Bill {
   id: string;
@@ -264,7 +265,7 @@ const UtilityBills = () => {
         </Tabs>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : filteredBills.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

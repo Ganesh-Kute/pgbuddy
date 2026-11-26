@@ -16,6 +16,7 @@ import OverLimitBanner from "@/components/OverLimitBanner";
 import { useStaffAccess, staffAccessKey } from "@/hooks/useStaffAccess";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDashboardData } from "@/hooks/useDashboardData";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 // Charts load after the numbers: the chart library is the biggest download in the app.
 const DashboardCharts = lazy(() => import("@/components/dashboard/DashboardCharts"));
@@ -212,17 +213,19 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {loadFailed && (
+        {loadFailed ? (
           <Card className="border-destructive/50">
             <CardContent className="pt-6 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm">Could not load your dashboard numbers. Check your connection and try again.</p>
               <Button variant="outline" size="sm" onClick={retryLoad}>Retry</Button>
             </CardContent>
           </Card>
-        )}
-
+        ) : dataLoading ? (
+          <DelayedPageSkeleton variant="cards" count={4} />
+        ) : (
+          <>
         {/* Onboarding progress - show if not fully set up, and only once the real numbers are known */}
-        {dashboard.data && !loadFailed && completedSteps < 4 && (
+        {dashboard.data && completedSteps < 4 && (
           <Card className="border-primary/20 bg-primary/5">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-4">
@@ -406,6 +409,8 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

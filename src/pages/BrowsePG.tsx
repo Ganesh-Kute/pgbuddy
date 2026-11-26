@@ -284,9 +284,9 @@ const BrowsePG = () => {
 
           {/* Results count */}
           <div className="max-w-5xl mx-auto flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              {loading ? "Loading..." : `${sorted.length} PG${sorted.length !== 1 ? "s" : ""} found`}
-            </p>
+            <div className="text-sm text-muted-foreground">
+              {loading ? <Skeleton className="h-4 w-24" aria-label="Loading" /> : `${sorted.length} PG${sorted.length !== 1 ? "s" : ""} found`}
+            </div>
             {(searchCity || genderFilter !== "all" || maxRent || roomTypeFilter !== "all") && (
               <Button variant="ghost" size="sm" onClick={() => { setSearchCity(""); setGenderFilter("all"); setMaxRent(""); setRoomTypeFilter("all"); }}>
                 Clear filters

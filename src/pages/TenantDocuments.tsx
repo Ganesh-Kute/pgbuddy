@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { prepareUpload, UploadRejected } from "@/lib/image-compress";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Doc {
   id: string;
@@ -177,7 +178,7 @@ const TenantDocuments = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : docs.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

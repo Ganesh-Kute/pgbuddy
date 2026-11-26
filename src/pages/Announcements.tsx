@@ -18,6 +18,7 @@ import OverLimitBanner from "@/components/OverLimitBanner";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { useSubscriptionPlan } from "@/hooks/useSubscriptionPlan";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Announcement {
   id: string;
@@ -190,7 +191,7 @@ const Announcements = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : announcements.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
