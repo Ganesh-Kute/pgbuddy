@@ -15,9 +15,14 @@ interface StaffAccess {
   accessiblePropertyIds: string[];
   /** True until the signed-in user and their access are both known. Never fetch while true. */
   loading: boolean;
+  /**
+   * True when the access read failed (offline, server error). The property list is then EMPTY because it is
+   * unknown, not because there are none: show an error, never a "no properties yet" screen.
+   */
+  failed: boolean;
 }
 
-export type ResolvedAccess = Omit<StaffAccess, "loading">;
+export type ResolvedAccess = Omit<StaffAccess, "loading" | "failed">;
 
 const NO_ACCESS: ResolvedAccess = {
   isStaff: false,
@@ -80,12 +85,12 @@ export const useStaffAccess = (): StaffAccess => {
     staleTime: 5 * 60_000,
   });
 
-  if (!userId) return { ...NO_ACCESS, loading: authLoading };
-  if (authLoading || query.isPending) return { ...NO_ACCESS, loading: true };
+  if (!userId) return { ...NO_ACCESS, loading: authLoading, failed: false };
+  if (authLoading || query.isPending) return { ...NO_ACCESS, loading: true, failed: false };
   if (query.isError) {
     // Fail closed: no properties. Owners still get their own id so their own rows load under RLS.
     console.error("Could not load property access:", query.error);
-    return { ...NO_ACCESS, effectiveOwnerId: authIsStaff ? null : userId, loading: false };
+    return { ...NO_ACCESS, effectiveOwnerId: authIsStaff ? null : userId, loading: false, failed: true };
   }
-  return { ...query.data, loading: false };
+  return { ...query.data, loading: false, failed: false };
 };

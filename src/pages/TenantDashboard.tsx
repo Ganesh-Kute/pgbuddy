@@ -8,7 +8,6 @@ import TenantLayout from "@/components/dashboard/TenantLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Separator } from "@/components/ui/separator";
-import { motion } from "framer-motion";
 
 interface Assignment {
   id: string;
@@ -105,7 +104,7 @@ const TenantDashboard = () => {
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
+          <div className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300" style={{ animationDelay: "0ms" }}>
             <Card className={pendingDues > 0 ? "border-warning/50" : ""}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground">Pending Dues</CardTitle>
@@ -117,8 +116,8 @@ const TenantDashboard = () => {
                 </p>
               </CardContent>
             </Card>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          </div>
+          <div className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300" style={{ animationDelay: "50ms" }}>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground">Open Complaints</CardTitle>
@@ -128,8 +127,8 @@ const TenantDashboard = () => {
                 <p className="text-xl font-bold">{openComplaints}</p>
               </CardContent>
             </Card>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          </div>
+          <div className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300" style={{ animationDelay: "100ms" }}>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground">Vacancy Notice</CardTitle>
@@ -141,8 +140,8 @@ const TenantDashboard = () => {
                 </Badge>
               </CardContent>
             </Card>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+          </div>
+          <div className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300" style={{ animationDelay: "150ms" }}>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground">Days Stayed</CardTitle>
@@ -152,7 +151,7 @@ const TenantDashboard = () => {
                 <p className="text-xl font-bold">{daysStayed > 0 ? daysStayed : "—"}</p>
               </CardContent>
             </Card>
-          </motion.div>
+          </div>
         </div>
 
         {/* Current Room Details */}

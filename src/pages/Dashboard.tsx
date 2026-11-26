@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Building2, Users, Home, CreditCard, TrendingUp, AlertCircle, IndianRupee, Receipt, Plus, ArrowRight, MessageSquare, BellDot, Filter, CalendarIcon } from "lucide-react";
-import { format, subMonths } from "date-fns";
+import { endOfDay, format, startOfDay, subDays, subMonths } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -10,16 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { motion } from "framer-motion";
 import { Separator } from "@/components/ui/separator";
 import { useSubscriptionGuard } from "@/hooks/useSubscriptionGuard";
 import OverLimitBanner from "@/components/OverLimitBanner";
-import { useStaffAccess } from "@/hooks/useStaffAccess";
+import { useStaffAccess, staffAccessKey } from "@/hooks/useStaffAccess";
+import { useQueryClient } from "@tanstack/react-query";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
-const CHART_COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "#f59e0b", "#ef4444", "#10b981", "#8b5cf6", "#06b6d4", "#ec4899"];
+// Charts load after the numbers: the chart library is the biggest download in the app.
+const DashboardCharts = lazy(() => import("@/components/dashboard/DashboardCharts"));
 
 type PresetKey = "last30" | "last3m" | "last6m" | "last12m" | "custom";
 
@@ -31,23 +30,33 @@ const presets: { key: PresetKey; label: string }[] = [
   { key: "custom", label: "Custom range" },
 ];
 
+// Whole days, not "now": the range is part of the dashboard's cache key, so it must be the same on every
+// visit during a day. With `to: now` each visit got a new key: a cache miss and a blank page every time.
 const getPresetRange = (key: PresetKey): { from: Date; to: Date } => {
   const now = new Date();
+  const to = endOfDay(now);
   switch (key) {
-    case "last30": return { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30), to: now };
-    case "last3m": return { from: subMonths(now, 3), to: now };
-    case "last6m": return { from: subMonths(now, 6), to: now };
-    case "last12m": return { from: subMonths(now, 12), to: now };
-    default: return { from: subMonths(now, 3), to: now };
+    case "last30": return { from: startOfDay(subDays(now, 30)), to };
+    case "last3m": return { from: startOfDay(subMonths(now, 3)), to };
+    case "last6m": return { from: startOfDay(subMonths(now, 6)), to };
+    case "last12m": return { from: startOfDay(subMonths(now, 12)), to };
+    default: return { from: startOfDay(subMonths(now, 3)), to };
   }
 };
 
+const NO_DATA = {
+  stats: { properties: 0, rooms: 0, tenants: 0, pendingPayments: 0, complaints: 0, pendingRevenue: 0, collectedRevenue: 0, totalExpenses: 0, vacancyNotices: 0 },
+  recentComplaints: [] as { id: string; title: string; status: string; category: string; created_at: string }[],
+  occupancy: { occupied: 0, vacant: 0 },
+  expensesByCategory: [] as { name: string; value: number }[],
+  monthlyPayments: [] as { month: string; collected: number; pending: number }[],
+};
+
 const Dashboard = () => {
-  const { user } = useAuth();
   const { isOverLimit, bedCount, bedLimit, limits } = useSubscriptionGuard();
-  const { effectiveOwnerId, isStaff, staffPropertyId, accessiblePropertyIds, loading: staffLoading } = useStaffAccess();
+  const { effectiveOwnerId, isStaff, staffPropertyId, accessiblePropertyIds, loading: staffLoading, failed: accessFailed } = useStaffAccess();
+  const queryClient = useQueryClient();
   const [filterPropertyId, setFilterPropertyId] = useState<string>("all");
-  const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
 
   const [activePreset, setActivePreset] = useState<PresetKey>("last3m");
   const [dateRange, setDateRange] = useState(getPresetRange("last3m"));
@@ -66,119 +75,28 @@ const Dashboard = () => {
       setDateRange({ from: customFrom, to: customTo });
     }
   };
-  const [stats, setStats] = useState({
-    properties: 0,
-    rooms: 0,
-    tenants: 0,
-    pendingPayments: 0,
-    complaints: 0,
-    pendingRevenue: 0,
-    collectedRevenue: 0,
-    totalExpenses: 0,
-    vacancyNotices: 0,
+  const dashboard = useDashboardData({
+    ownerId: effectiveOwnerId,
+    accessiblePropertyIds,
+    staffPropertyId: isStaff ? staffPropertyId : null,
+    filterPropertyId,
+    range: dateRange,
+    // An unknown property list must not be read as "no properties" (that showed 'Setup Your PG' offline).
+    enabled: !staffLoading && !accessFailed,
   });
-  const [expensesByCategory, setExpensesByCategory] = useState<{ name: string; value: number }[]>([]);
-  const [monthlyPayments, setMonthlyPayments] = useState<{ month: string; collected: number; pending: number }[]>([]);
-  const [occupancy, setOccupancy] = useState({ occupied: 0, vacant: 0 });
-  const [recentComplaints, setRecentComplaints] = useState<{ id: string; title: string; status: string; category: string; created_at: string }[]>([]);
-
-  useEffect(() => {
-    if (!effectiveOwnerId || staffLoading) return;
-    const ownerId = effectiveOwnerId;
-    const fetchStats = async () => {
-      // Fetch properties list for filter dropdown
-      const { data: propList } = await supabase.from("properties").select("id, name").eq("owner_id", ownerId);
-      const allProps = propList ?? [];
-      setProperties(allProps);
-
-      // For staff with assigned property, auto-lock
-      if (isStaff && staffPropertyId) {
-        setFilterPropertyId(staffPropertyId);
-      }
-
-      // Determine which property IDs to filter by
-      const effectivePropIds = isStaff && staffPropertyId
-        ? [staffPropertyId]
-        : filterPropertyId !== "all"
-        ? [filterPropertyId]
-        : allProps.map(p => p.id);
-
-      if (effectivePropIds.length === 0) {
-        return;
-      }
-
-      const fromISO = dateRange.from.toISOString();
-      const toISO = dateRange.to.toISOString();
-
-      const [propRes, roomRes, tenantRes, pendingPayRes, paidPayRes, complaintRes, expRes, noticeRes, recentCompRes] = await Promise.all([
-        supabase.from("properties").select("id", { count: "exact", head: true }).in("id", effectivePropIds),
-        supabase.from("rooms").select("id, is_vacant, capacity, property_id").in("property_id", effectivePropIds),
-        supabase.from("tenant_assignments").select("id, property_id").in("property_id", effectivePropIds).eq("is_active", true),
-        supabase.from("rent_payments").select("id, amount, month, property_id").in("property_id", effectivePropIds).eq("status", "pending").gte("created_at", fromISO).lte("created_at", toISO),
-        supabase.from("rent_payments").select("id, amount, month, property_id").in("property_id", effectivePropIds).eq("status", "paid").gte("created_at", fromISO).lte("created_at", toISO),
-        supabase.from("complaints").select("id, property_id").in("property_id", effectivePropIds).eq("status", "open").gte("created_at", fromISO).lte("created_at", toISO),
-        supabase.from("expenses").select("amount, category, property_id").in("property_id", effectivePropIds).gte("created_at", fromISO).lte("created_at", toISO),
-        supabase.from("vacancy_notices").select("id, property_id").in("property_id", effectivePropIds).eq("status", "submitted"),
-        supabase.from("complaints").select("id, title, status, category, created_at, property_id").in("property_id", effectivePropIds).gte("created_at", fromISO).lte("created_at", toISO).order("created_at", { ascending: false }).limit(5),
-      ]);
-
-      const rooms = roomRes.data ?? [];
-      const pendingPay = pendingPayRes.data ?? [];
-      const paidPay = paidPayRes.data ?? [];
-      const expenses = expRes.data ?? [];
-
-      setStats({
-        properties: propRes.count ?? 0,
-        rooms: rooms.length,
-        tenants: tenantRes.data?.length ?? 0,
-        pendingPayments: pendingPay.length,
-        complaints: complaintRes.data?.length ?? 0,
-        pendingRevenue: pendingPay.reduce((s, p) => s + Number(p.amount), 0),
-        collectedRevenue: paidPay.reduce((s, p) => s + Number(p.amount), 0),
-        totalExpenses: expenses.reduce((s, e) => s + Number(e.amount), 0),
-        vacancyNotices: noticeRes.data?.length ?? 0,
-      });
-
-      setRecentComplaints(recentCompRes.data ?? []);
-
-      // Occupancy — use bed capacity and active tenant count
-      const activeTenants = tenantRes.data?.length ?? 0;
-      const totalBeds = rooms.reduce((sum, r) => sum + (r.capacity ?? 1), 0);
-      setOccupancy({ occupied: activeTenants, vacant: Math.max(0, totalBeds - activeTenants) });
-
-      // Expense by category
-      const catMap: Record<string, number> = {};
-      expenses.forEach((e) => {
-        catMap[e.category] = (catMap[e.category] || 0) + Number(e.amount);
-      });
-      setExpensesByCategory(Object.entries(catMap).map(([name, value]) => ({ name, value })));
-
-      // Monthly payments
-      const monthMap: Record<string, { collected: number; pending: number }> = {};
-      paidPay.forEach((p) => {
-        if (!monthMap[p.month]) monthMap[p.month] = { collected: 0, pending: 0 };
-        monthMap[p.month].collected += Number(p.amount);
-      });
-      pendingPay.forEach((p) => {
-        if (!monthMap[p.month]) monthMap[p.month] = { collected: 0, pending: 0 };
-        monthMap[p.month].pending += Number(p.amount);
-      });
-      setMonthlyPayments(
-        Object.entries(monthMap)
-          .map(([month, data]) => ({ month, ...data }))
-          .sort((a, b) => a.month.localeCompare(b.month))
-          .slice(-6)
-      );
-    };
-    fetchStats();
-  }, [effectiveOwnerId, staffLoading, filterPropertyId, isStaff, staffPropertyId, dateRange]);
+  const loadFailed = accessFailed || (dashboard.isError && !dashboard.data);
+  const retryLoad = () => {
+    // Every access entry (the key is the signed-in user, which this page does not hold).
+    if (accessFailed) queryClient.invalidateQueries({ queryKey: staffAccessKey(null).slice(0, 1) });
+    else dashboard.refetch();
+  };
+  const { properties } = dashboard;
+  const { stats, recentComplaints, occupancy, expensesByCategory, monthlyPayments } = dashboard.data ?? NO_DATA;
+  /** True only on a first visit with nothing to show yet; a revisit shows the cached numbers at once. */
+  const dataLoading = staffLoading || dashboard.isLoading;
 
   const profit = stats.collectedRevenue - stats.totalExpenses;
   const isNewOwner = stats.properties === 0;
-  const [dataLoading, setDataLoading] = useState(true);
-
-  // Track data loading via stats
-  useEffect(() => { if (stats.properties >= 0 && !staffLoading) setDataLoading(false); }, [stats, staffLoading]);
 
   // Onboarding steps
   const onboardingSteps = [
@@ -294,8 +212,17 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Onboarding progress - show if not fully set up */}
-        {completedSteps < 4 && (
+        {loadFailed && (
+          <Card className="border-destructive/50">
+            <CardContent className="pt-6 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm">Could not load your dashboard numbers. Check your connection and try again.</p>
+              <Button variant="outline" size="sm" onClick={retryLoad}>Retry</Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Onboarding progress - show if not fully set up, and only once the real numbers are known */}
+        {dashboard.data && !loadFailed && completedSteps < 4 && (
           <Card className="border-primary/20 bg-primary/5">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-4">
@@ -334,7 +261,7 @@ const Dashboard = () => {
             { label: "Active Tenants", value: stats.tenants, icon: Users, color: "text-primary", link: "/dashboard/tenants" },
             { label: "Open Complaints", value: stats.complaints, icon: AlertCircle, color: "text-destructive", link: "/dashboard/complaints" },
           ].map((stat, i) => (
-            <motion.div key={stat.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+            <div key={stat.label} className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300" style={{ animationDelay: `${i * 50}ms` }}>
               <Link to={stat.link}>
                 <Card className="hover:shadow-md transition-shadow cursor-pointer">
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -346,7 +273,7 @@ const Dashboard = () => {
                   </CardContent>
                 </Card>
               </Link>
-            </motion.div>
+            </div>
           ))}
         </div>
 
@@ -418,75 +345,10 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Monthly Revenue Chart */}
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Monthly Payments</CardTitle>
-                <Button variant="ghost" size="sm" className="text-xs" asChild>
-                  <Link to="/dashboard/payments">View All</Link>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {monthlyPayments.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={monthlyPayments}>
-                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis dataKey="month" fontSize={11} />
-                    <YAxis fontSize={11} />
-                    <Tooltip />
-                    <Bar dataKey="collected" name="Collected" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="pending" name="Pending" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-12">No payment data yet</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Expense Breakdown */}
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Expense Breakdown</CardTitle>
-                <Button variant="ghost" size="sm" className="text-xs" asChild>
-                  <Link to="/dashboard/expenses">View All</Link>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {expensesByCategory.length > 0 ? (
-                <div className="flex items-center gap-6">
-                  <ResponsiveContainer width="50%" height={180}>
-                    <PieChart>
-                      <Pie data={expensesByCategory} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} innerRadius={35}>
-                        {expensesByCategory.map((_, i) => (
-                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="space-y-1.5">
-                    {expensesByCategory.map((e, i) => (
-                      <div key={e.name} className="flex items-center gap-2 text-xs">
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
-                        <span className="capitalize text-muted-foreground">{e.name}</span>
-                        <span className="font-medium ml-auto">₹{e.value.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-12">No expense data yet</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        {/* Charts Row: loaded after the numbers. The fallback keeps the same height, so nothing jumps. */}
+        <Suspense fallback={<div className="grid grid-cols-1 lg:grid-cols-2 gap-6" aria-hidden="true"><div className="h-[300px] rounded-lg border bg-card" /><div className="h-[300px] rounded-lg border bg-card" /></div>}>
+          <DashboardCharts monthlyPayments={monthlyPayments} expensesByCategory={expensesByCategory} />
+        </Suspense>
 
         {/* Occupancy + Recent Complaints */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
