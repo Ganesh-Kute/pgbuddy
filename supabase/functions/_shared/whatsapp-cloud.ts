@@ -93,7 +93,10 @@ export async function uploadMedia(
   const form = new FormData();
   form.append("messaging_product", "whatsapp");
   form.append("type", mimeType);
-  form.append("file", new Blob([bytes], { type: mimeType }), filename);
+  // A copy backed by a plain ArrayBuffer: TypeScript 5.9 rejects a Uint8Array<ArrayBufferLike> as a Blob part.
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  form.append("file", new Blob([copy], { type: mimeType }), filename);
   try {
     const { ok, body } = await graphFetch(fetchFn, `${GRAPH}/${cfg.phoneNumberId}/media`, {
       method: "POST",

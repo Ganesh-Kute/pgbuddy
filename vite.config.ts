@@ -7,15 +7,19 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // The native (Capacitor) app packs `dist/` into the APK, so anything the phone does not need costs
 // every user download size and install time. `vite build --mode native` leaves out:
-//  - the website's APK download file (an old APK was being packed inside every new APK),
+//  - the website's APK download files, pg-buddy.apk and the whole downloads/ folder (an old APK was
+//    being packed inside every new APK: the 26 Nov 2026 Mauli APK carried a 2.9 MB older APK in
+//    assets/public/downloads/, and each build would have nested the previous one again),
 //  - the social-share image,
 //  - the service worker (see `native` below).
+export const NATIVE_BUILD_STRIP = ["pg-buddy.apk", "og-image.png", "downloads"] as const;
+
 const stripFromNativeBuild = (): Plugin => ({
   name: "strip-from-native-build",
   apply: "build",
   closeBundle() {
-    for (const file of ["pg-buddy.apk", "og-image.png"]) {
-      rmSync(path.resolve(__dirname, "dist", file), { force: true });
+    for (const entry of NATIVE_BUILD_STRIP) {
+      rmSync(path.resolve(__dirname, "dist", entry), { force: true, recursive: true });
     }
   },
 });

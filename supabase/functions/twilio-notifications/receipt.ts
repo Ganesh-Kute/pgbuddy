@@ -192,7 +192,10 @@ export async function handlePaymentReceipt(payload: { payment_id?: unknown; mode
   const pdf = await renderReceiptPdf(deps.pdfLib, receipt, now());
 
   if (mode === "download") {
-    return new Response(pdf, {
+    // Plain-ArrayBuffer copy: TypeScript 5.9 rejects a Uint8Array<ArrayBufferLike> as a Response body.
+    const body = new Uint8Array(pdf.byteLength);
+    body.set(pdf);
+    return new Response(body, {
       status: 200,
       headers: {
         ...corsHeaders,

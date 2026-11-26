@@ -129,6 +129,18 @@ export function formatReceiptWhatsAppFeedback(res: WhatsAppResult | null): Whats
  * Hook to dispatch WhatsApp notifications and download server-rendered receipt PDFs
  * via the twilio-notifications edge function.
  */
+/**
+ * The PDF bytes as a file. A view (Uint8Array, DataView...) may cover only part of its buffer, so its
+ * bytes are copied: using view.buffer took the whole buffer, extra bytes included. The copy is also
+ * backed by a plain ArrayBuffer, which TypeScript 5.9 requires for a Blob part.
+ */
+export function pdfBlobFromBytes(data: ArrayBuffer | ArrayBufferView): Blob {
+  if (data instanceof ArrayBuffer) return new Blob([data], { type: "application/pdf" });
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+  return new Blob([copy], { type: "application/pdf" });
+}
+
 export const useWhatsAppNotify = () => {
   const [loading, setLoading] = useState(false);
 
@@ -191,8 +203,7 @@ export const useWhatsAppNotify = () => {
       }
 
       if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
-        const view = data instanceof ArrayBuffer ? data : data.buffer;
-        return { blob: new Blob([view], { type: "application/pdf" }) };
+        return { blob: pdfBlobFromBytes(data) };
       }
 
       if (data && typeof data === "object" && typeof (data as { pdf_base64?: unknown }).pdf_base64 === "string") {
