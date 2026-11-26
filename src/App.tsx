@@ -65,6 +65,7 @@ const MessPayments = lazyWithReload(() => import("./pages/MessPayments"));
 const MessManagement = lazyWithReload(() => import("./pages/MessManagement"));
 const PublicReceipt = lazyWithReload(() => import("./pages/PublicReceipt"));
 const AboutUs = lazyWithReload(() => import("./pages/static/AboutUs"));
+const MauliPG = lazyWithReload(() => import("./pages/static/MauliPG"));
 const Careers = lazyWithReload(() => import("./pages/static/Careers"));
 const Blog = lazyWithReload(() => import("./pages/static/Blog"));
 const Contact = lazyWithReload(() => import("./pages/static/Contact"));
@@ -148,6 +149,7 @@ const App = () => (
               <Route path="/pgs/:city" element={<CityPGs />} />
               {/* Static pages */}
               <Route path="/about" element={<AboutUs />} />
+              <Route path="/mauli-pg" element={<MauliPG />} />
               <Route path="/careers" element={<Careers />} />
               <Route path="/blog" element={<Blog />} />
               <Route path="/contact" element={<Contact />} />

@@ -12,6 +12,7 @@ const Footer = () => {
     ],
     company: [
       { name: "About Us", href: "/about" },
+      { name: "Mauli PG", href: "/mauli-pg" },
       { name: "Careers", href: "/careers" },
       { name: "Blog", href: "/blog" },
       { name: "Contact", href: "/contact" },
