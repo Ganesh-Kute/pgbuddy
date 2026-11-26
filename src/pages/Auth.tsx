@@ -90,6 +90,17 @@ const Auth = () => {
       }
     } catch (error) {
       const description = error instanceof Error ? error.message : "Something went wrong. Please try again.";
+      // The server refuses "Log in" for a number nobody signed up or invited (hook_before_user_created):
+      // take them to Sign up with the number already filled in, instead of a dead end.
+      if (mode === "login" && /sign up first/i.test(description)) {
+        setMode("signup");
+        setShowOtp(false);
+        toast({
+          title: "No account for this number",
+          description: "Enter your name and choose how you use the app to sign up.",
+        });
+        return;
+      }
       toast({ title: "Error", description, variant: "destructive" });
     } finally {
       setLoading(false);
