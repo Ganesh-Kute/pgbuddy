@@ -256,9 +256,9 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
               <p className="text-muted-foreground">Monthly billing and payment tracking</p>
             </div>
           )}
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {monthOptions.map(m => (
                   <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
@@ -306,7 +306,7 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
           <div className="space-y-2">
             {payments.map(p => (
               <Card key={p.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="py-3 flex items-center justify-between gap-4">
+                <CardContent className="py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold">{p.member_name}</span>
@@ -322,7 +322,7 @@ const MessPayments = ({ standalone = true }: { standalone?: boolean }) => {
                   <div>
                     {p.status === "pending" ? (
                       <div className="flex items-center gap-2">
-                        <Button size="icon" variant="outline" onClick={() => handeRemindPayment(p)} disabled={actionLoading} className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50">
+                        <Button size="icon" variant="outline" onClick={() => handeRemindPayment(p)} disabled={actionLoading} className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 text-green-600 hover:text-green-700 hover:bg-green-50">
                           <MessageSquare className="w-4 h-4" />
                         </Button>
                         <Button size="sm" className="gradient-primary" onClick={() => { setMarkingId(p.id); setPaymentDate(format(new Date(), "yyyy-MM-dd")); }}>

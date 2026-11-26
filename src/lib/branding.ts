@@ -14,7 +14,7 @@ export const getAppName = (): string => {
 
 export const getAppLogo = (): string => {
   // If white labeled, we assume custom-logo.png is placed in the public folder
-  return isWhiteLabel ? "/custom-logo.png" : "/lovable-uploads/23dc2ea5-c637-4d08-a5b6-c5db16b801a2.png";
+  return isWhiteLabel ? "/custom-logo.png" : "/pwa-icon-192.png";
 };
 
 /** Colour theme for a white-label build ("mauli"), or "" for the PG Buddy colours. */

@@ -194,7 +194,7 @@ const MessGuests = () => {
             ) : (
               <div className="space-y-2">
                 {filtered.map(guest => (
-                  <div key={guest.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors">
+                  <div key={guest.id} className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3 border rounded-lg hover:bg-muted/30 transition-colors">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">{guest.guest_name}</span>
@@ -211,7 +211,7 @@ const MessGuests = () => {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="font-bold">₹{guest.amount}</div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(guest.id)}>
+                      <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 text-destructive" onClick={() => handleDelete(guest.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>

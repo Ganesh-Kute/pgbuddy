@@ -204,4 +204,62 @@ describe("T3 mobile layout overflow & 44px tap targets", () => {
     expect(src).toContain("[@media(hover:hover)]:group-hover:opacity-100");
     expect(src).toContain("focus-within:opacity-100");
   });
+
+  it("getAppLogo returns an existing non-404 asset in public/ by default", async () => {
+    const { getAppLogo } = await import("@/lib/branding");
+    const logo = getAppLogo();
+    expect(logo).toBe("/pwa-icon-192.png");
+    const assetPath = path.join(ROOT, "public", logo.replace(/^\//, ""));
+    expect(fs.existsSync(assetPath)).toBe(true);
+  });
+
+  it("buttonVariants size=sm preserves >=44px mobile touch height", async () => {
+    const { buttonVariants } = await import("@/components/ui/button");
+    const cls = buttonVariants({ size: "sm" });
+    expect(cls).toContain("min-h-[44px]");
+  });
+
+  it("Properties, Tenants, and Mess pages preserve >=44px mobile icon targets and wrap narrow headers/rows", () => {
+    const targetFiles = [
+      "src/pages/Properties.tsx",
+      "src/pages/Tenants.tsx",
+      "src/pages/MessPlans.tsx",
+      "src/pages/MessMembers.tsx",
+      "src/pages/MessPayments.tsx",
+      "src/pages/MessGuests.tsx",
+      "src/pages/MessExpenses.tsx",
+    ];
+    const bareIconRe = /className="[^"]*\bh-[678] w-[678]\b/;
+    for (const rel of targetFiles) {
+      const src = fs.readFileSync(path.join(ROOT, rel), "utf8");
+      const lines = src.split(/\r?\n/);
+      for (const line of lines) {
+        if (bareIconRe.test(line)) {
+          expect(line, rel + " bare small icon target: " + line.trim()).toContain("min-h-[44px]");
+        }
+      }
+    }
+    const messPlans = fs.readFileSync(path.join(ROOT, "src/pages/MessPlans.tsx"), "utf8");
+    expect(messPlans).toContain("justify-between flex-wrap");
+    const messPayments = fs.readFileSync(path.join(ROOT, "src/pages/MessPayments.tsx"), "utf8");
+    expect(messPayments).not.toContain('<div className="flex gap-2 items-center">');
+    const messMembers = fs.readFileSync(path.join(ROOT, "src/pages/MessMembers.tsx"), "utf8");
+    expect(messMembers).not.toContain('className="py-3 flex items-center justify-between gap-4"');
+    const messGuests = fs.readFileSync(path.join(ROOT, "src/pages/MessGuests.tsx"), "utf8");
+    expect(messGuests).not.toContain('className="flex items-center justify-between p-3 border');
+    const messExpenses = fs.readFileSync(path.join(ROOT, "src/pages/MessExpenses.tsx"), "utf8");
+    expect(messExpenses).not.toContain('className="flex items-center justify-between p-3 border');
+  });
+
+  it("PublicReceipt uses semantic theme tokens, white-label getAppName, and mobile padding", () => {
+    const src = fs.readFileSync(path.join(ROOT, "src/pages/PublicReceipt.tsx"), "utf8");
+    expect(src).toContain("getAppName");
+    expect(src).not.toContain("signed by PG Buddy");
+    expect(src).not.toContain("Powered by PG Buddy");
+    expect(src).not.toContain("🏠 PG Buddy");
+    expect(src).not.toMatch(/(?<!print:)bg-slate-50/);
+    expect(src).toContain("bg-background");
+    expect(src).toContain("bg-card");
+    expect(src).toContain("p-5 sm:p-12");
+  });
 });

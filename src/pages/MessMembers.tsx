@@ -269,7 +269,7 @@ const MessMembers = ({ standalone = true }: { standalone?: boolean }) => {
           <div className="space-y-2">
             {filtered.map(member => (
               <Card key={member.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="py-3 flex items-center justify-between gap-4">
+                <CardContent className="py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold">{member.full_name}</span>
@@ -286,14 +286,14 @@ const MessMembers = ({ standalone = true }: { standalone?: boolean }) => {
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(member)} title="Edit">
+                    <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8" onClick={() => openEdit(member)} title="Edit">
                       <Edit2 className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleStatus(member)} title={member.status === "active" ? "Pause" : "Activate"}>
+                    <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8" onClick={() => toggleStatus(member)} title={member.status === "active" ? "Pause" : "Activate"}>
                       {member.status === "active" ? <UserX className="w-3.5 h-3.5 text-yellow-600" /> : <UserCheck className="w-3.5 h-3.5 text-green-600" />}
                     </Button>
                     {member.status !== "cancelled" && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => cancelMember(member.id)} title="Cancel">
+                      <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 text-destructive" onClick={() => cancelMember(member.id)} title="Cancel">
                         <UserX className="w-3.5 h-3.5" />
                       </Button>
                     )}
