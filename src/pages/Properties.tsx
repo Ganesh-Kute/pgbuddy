@@ -222,10 +222,10 @@ const Properties = () => {
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-lg">{p.name}</CardTitle>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}>
+                      <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8" onClick={() => openEdit(p)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(p.id)}>
+                      <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 text-destructive" onClick={() => handleDelete(p.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>

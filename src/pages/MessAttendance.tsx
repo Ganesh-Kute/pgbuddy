@@ -10,6 +10,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface MemberRow {
   memberId: string;
@@ -216,7 +217,7 @@ const MessAttendance = ({ standalone = true }: { standalone?: boolean }) => {
         </div>
 
         {loading ? (
-          <div className="text-center py-12 text-muted-foreground">Loading...</div>
+          <DelayedPageSkeleton variant="list" count={6} />
         ) : rows.length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">

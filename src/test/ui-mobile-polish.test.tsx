@@ -3,6 +3,7 @@ import path from "node:path";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 const isNativeMock = vi.fn(() => false);
@@ -78,11 +79,12 @@ import Footer from "@/components/landing/Footer";
 const ROOT = path.resolve(__dirname, "../..");
 
 function renderIntoContainer(node: React.ReactNode) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(node);
+    root.render(<QueryClientProvider client={qc}>{node}</QueryClientProvider>);
   });
   return {
     container,

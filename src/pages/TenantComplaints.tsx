@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Complaint {
   id: string;
@@ -187,7 +188,7 @@ const TenantComplaints = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : complaints.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

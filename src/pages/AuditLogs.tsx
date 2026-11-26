@@ -7,6 +7,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface AuditLog {
   id: string;
@@ -152,7 +153,7 @@ const AuditLogs = () => {
 
         {/* Log entries */}
         {loading ? (
-          <p className="text-muted-foreground">Loading activity...</p>
+          <DelayedPageSkeleton variant="list" count={6} />
         ) : logs.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

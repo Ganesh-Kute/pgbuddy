@@ -138,7 +138,7 @@ const MessPlans = ({ standalone = true }: { standalone?: boolean }) => {
 
   const content = (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           {!standalone ? null : (
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -207,10 +207,10 @@ const MessPlans = ({ standalone = true }: { standalone?: boolean }) => {
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-lg">{plan.name}</CardTitle>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(plan)}>
+                      <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7" onClick={() => openEdit(plan)}>
                         <Edit2 className="w-3.5 h-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(plan.id)}>
+                      <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7 text-destructive" onClick={() => handleDelete(plan.id)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>

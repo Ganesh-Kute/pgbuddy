@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import TenantLayout from "@/components/dashboard/TenantLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Announcement {
   id: string;
@@ -55,7 +56,7 @@ const TenantAnnouncements = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : announcements.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

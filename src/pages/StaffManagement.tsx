@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface StaffMember {
   id: string;
@@ -140,7 +141,7 @@ const StaffManagement = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Users className="w-6 h-6 text-primary" /> Staff Management
@@ -243,7 +244,7 @@ const StaffManagement = () => {
 
         {/* Staff list */}
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : staff.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -264,7 +265,7 @@ const StaffManagement = () => {
               return (
                 <Card key={s.id}>
                   <CardContent className="py-4">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${config.color}`}>
                           <config.icon className="w-5 h-5" />
@@ -290,7 +291,7 @@ const StaffManagement = () => {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <Select value={s.role} onValueChange={(val) => handleUpdateRole(s.id, val)}>
-                          <SelectTrigger className="w-[130px] h-8 text-xs">
+                          <SelectTrigger className="w-[130px] min-h-[44px] sm:min-h-0 sm:h-8 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

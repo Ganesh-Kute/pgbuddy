@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import TenantLayout from "@/components/dashboard/TenantLayout";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -122,7 +123,7 @@ const Marketplace = () => {
 
         {/* Results */}
         {loading ? (
-          <p className="text-muted-foreground">Loading listings...</p>
+          <DelayedPageSkeleton variant="cards" count={6} />
         ) : sorted.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

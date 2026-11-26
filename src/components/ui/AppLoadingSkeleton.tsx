@@ -1,8 +1,16 @@
+import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
+/** After this long on the loading screen, offer a way out (bad network must never lock anyone out). */
+export const SLOW_LOGIN_MS = 8000;
+
+// The ONE full-screen loader: lazy pages (Suspense), the route guard and the sign-in page while a
+// saved login is read all show this same screen, so nothing flashes or swaps on the way in.
 export const AppLoadingSkeleton = () => {
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex" role="status" aria-busy="true" aria-label="Loading">
       {/* Desktop Sidebar Skeleton - hidden on mobile */}
       <aside className="hidden lg:flex flex-col w-64 border-r border-border/50 bg-card/80 p-5 space-y-4">
         <div className="flex items-center gap-3 mb-6">
@@ -66,5 +74,65 @@ export const AppLoadingSkeleton = () => {
         </main>
       </div>
     </div>
+  );
+};
+
+/**
+ * The loading screen while the saved login and its role are read. If that takes longer than
+ * SLOW_LOGIN_MS (slow or broken network), it adds "Retry" and "Sign in again" on top.
+ */
+export const AuthWaitScreen = () => {
+  const { user, refreshRole, recheckSession, signOut } = useAuth();
+  const [slow, setSlow] = useState(false);
+  // Separate flags: a Retry that hangs on a dead network must never disable the way out.
+  const [retrying, setRetrying] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_LOGIN_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      // Signed in: read the role again. Not known yet whether a login is saved: read the session again.
+      if (user) await refreshRole();
+      else await recheckSession();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const signInAgain = async () => {
+    setSigningOut(true);
+    try {
+      // Local sign-out: it needs no network, so a dead connection cannot keep the old login around.
+      await signOut({ local: true });
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
+  return (
+    <>
+      <AppLoadingSkeleton />
+      {slow && (
+        <div className="fixed inset-x-0 bottom-0 z-50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="mx-auto max-w-sm rounded-2xl border border-border bg-card p-5 text-center shadow-xl" role="alert">
+            <p className="font-semibold">Taking longer than usual</p>
+            <p className="mt-1 text-sm text-muted-foreground">Check your internet connection.</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Button variant="outline" className="min-h-11" disabled={signingOut} onClick={signInAgain}>
+                Sign in again
+              </Button>
+              <Button className="min-h-11" disabled={retrying || signingOut} onClick={retry}>
+                {retrying ? "Trying..." : "Retry"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

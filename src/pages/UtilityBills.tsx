@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { StorageFileLink } from "@/components/StorageFileLink";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Bill {
   id: string;
@@ -157,7 +158,7 @@ const UtilityBills = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">Utility Bills</h1>
             <p className="text-muted-foreground">Track meter readings, generate & approve bills</p>
@@ -246,7 +247,7 @@ const UtilityBills = () => {
         {/* Pending approval alert */}
         {pendingApproval.length > 0 && (
           <Card className="border-warning/50 bg-warning/5">
-            <CardContent className="flex items-center justify-between py-3">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
               <p className="text-sm font-medium">{pendingApproval.length} bill{pendingApproval.length > 1 ? "s" : ""} with payment proof awaiting your approval</p>
               <Button size="sm" variant="outline" onClick={() => setTab("approval")}>Review Now</Button>
             </CardContent>
@@ -264,7 +265,7 @@ const UtilityBills = () => {
         </Tabs>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : filteredBills.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -278,10 +279,10 @@ const UtilityBills = () => {
             {filteredBills.map(b => (
               <Card key={b.id} className={b.proof_url && b.status === "pending" ? "border-warning/40" : ""}>
                 <CardContent className="py-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      {b.bill_type === "water" ? <Droplets className="w-5 h-5 text-primary" /> : <Zap className="w-5 h-5 text-warning" />}
-                      <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                      {b.bill_type === "water" ? <Droplets className="w-5 h-5 text-primary shrink-0" /> : <Zap className="w-5 h-5 text-warning shrink-0" />}
+                      <div className="min-w-0">
                         <p className="font-medium capitalize">{b.bill_type} · {b.bill_month}</p>
                         <p className="text-sm text-muted-foreground">
                           {b.properties?.name} · Room {b.rooms?.room_number}
@@ -299,7 +300,7 @@ const UtilityBills = () => {
 
                   {/* Proof + approval actions */}
                   {b.proof_url && (
-                    <div className="flex items-center gap-3 pt-2 border-t border-border">
+                    <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border">
                       <div className="flex items-center gap-2 text-sm flex-1">
                         <CheckCircle className="w-4 h-4 text-success" />
                         <span className="text-muted-foreground">Payment proof uploaded</span>

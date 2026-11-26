@@ -628,7 +628,7 @@ const Tenants = () => {
             <h1 className="text-2xl font-bold">Tenants</h1>
             <p className="text-muted-foreground">Manage tenant assignments and details</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {assignments.length > 0 && (
               <Button variant="outline" className="gap-2" onClick={() => {
                 const rows = assignments.map(a => ({
@@ -860,10 +860,10 @@ const Tenants = () => {
                 placeholder="Search by tenant name or phone..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-9 pr-11 sm:pr-9"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <button type="button" aria-label="Clear search" onClick={() => setSearchQuery("")} className="absolute right-0.5 sm:right-2 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center text-muted-foreground hover:text-foreground">
                   <X className="w-4 h-4" />
                 </button>
               )}
@@ -1167,7 +1167,7 @@ const Tenants = () => {
                     {documents.length > 0 ? documents.map(doc => (
                       <div key={doc.name} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
                         <span className="truncate flex-1">{doc.name.split("_").slice(1).join("_") || doc.name}</span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => downloadDoc(doc.name)}>
+                        <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7" onClick={() => downloadDoc(doc.name)}>
                           <Eye className="w-3 h-3" />
                         </Button>
                       </div>
@@ -1220,7 +1220,7 @@ const Tenants = () => {
                         <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/30">
                           <div className="flex justify-between items-center">
                             <p className="text-sm font-medium">Transfer to a new room</p>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setTransferOpen(false)}>
+                            <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-6 sm:w-6" onClick={() => setTransferOpen(false)}>
                               <X className="w-3.5 h-3.5" />
                             </Button>
                           </div>
@@ -1260,7 +1260,7 @@ const Tenants = () => {
                         <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/30">
                           <div className="flex justify-between items-center">
                             <p className="text-sm font-medium">Swap with another tenant</p>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSwapOpen(false)}>
+                            <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-6 sm:w-6" onClick={() => setSwapOpen(false)}>
                               <X className="w-3.5 h-3.5" />
                             </Button>
                           </div>

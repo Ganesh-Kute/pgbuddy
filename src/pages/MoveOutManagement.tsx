@@ -365,7 +365,7 @@ const MoveOutManagement = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-destructive font-medium">-₹{d.amount.toLocaleString()}</span>
                         {selectedRequest.status !== "completed" && (
-                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeDeduction(i)}>
+                          <Button size="icon" variant="ghost" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7" onClick={() => removeDeduction(i)}>
                             <X className="w-3 h-3" />
                           </Button>
                         )}
@@ -375,7 +375,7 @@ const MoveOutManagement = () => {
 
                   {/* Add Deduction */}
                   {selectedRequest.status !== "completed" && selectedRequest.status !== "rejected" && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap sm:flex-nowrap gap-2">
                       <Input placeholder="Deduction reason" value={newDeductionLabel} onChange={e => setNewDeductionLabel(e.target.value)} className="flex-1" />
                       <Input type="number" placeholder="Amount" value={newDeductionAmount} onChange={e => setNewDeductionAmount(e.target.value)} className="w-28" />
                       <Button size="sm" variant="outline" onClick={addDeduction}>

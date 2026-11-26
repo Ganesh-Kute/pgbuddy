@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { format } from "date-fns";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Assignment {
   id: string;
@@ -156,7 +157,7 @@ const TenantMoveOut = () => {
   };
 
   if (loading) {
-    return <TenantLayout><div className="flex items-center justify-center h-64 text-muted-foreground">Loading...</div></TenantLayout>;
+    return <TenantLayout><DelayedPageSkeleton variant="detail" count={5} /></TenantLayout>;
   }
 
   if (!assignment) {

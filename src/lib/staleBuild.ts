@@ -12,6 +12,7 @@
 // is offline, shows an error with a Reload button instead of reloading forever.
 
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
+import { pageLoads } from "./loadingActivity";
 
 /** What browsers and Vite say when a page file cannot be loaded. */
 const CHUNK_ERROR_PATTERNS: readonly RegExp[] = [
@@ -103,12 +104,22 @@ export function lazyWithReload<T extends ComponentType<any>>( // eslint-disable-
   factory: () => Promise<{ default: T }>,
   reload: () => boolean = reloadForNewBuild,
 ): LazyExoticComponent<T> {
-  return lazy(() =>
-    factory().catch((err: unknown) => {
-      if (isChunkLoadError(err) && reload()) return new Promise<{ default: T }>(() => {});
-      throw err;
-    }),
-  );
+  return lazy(() => {
+    // Counted while the page file downloads, for the top progress bar. A reload that is under way
+    // stays counted: the bar keeps running until the new page replaces this one.
+    const done = pageLoads.start();
+    return factory().then(
+      (mod) => {
+        done();
+        return mod;
+      },
+      (err: unknown) => {
+        if (isChunkLoadError(err) && reload()) return new Promise<{ default: T }>(() => {});
+        done();
+        throw err;
+      },
+    );
+  });
 }
 
 /**

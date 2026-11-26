@@ -8,6 +8,7 @@ import TenantLayout from "@/components/dashboard/TenantLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { motion } from "framer-motion";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface OnboardingStep {
   key: string;
@@ -87,7 +88,7 @@ const TenantOnboarding = () => {
   const progress = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
 
   if (loading) {
-    return <TenantLayout><p className="text-muted-foreground">Loading...</p></TenantLayout>;
+    return <TenantLayout><DelayedPageSkeleton variant="detail" count={5} /></TenantLayout>;
   }
 
   return (

@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   Building2, Home, Users, CreditCard, BarChart3, Receipt,
   LogOut, Menu, X, MessageSquare, Megaphone, QrCode, User, Crown, UtensilsCrossed,
@@ -7,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,11 +43,28 @@ const getSidebarLinks = (t: (k: string) => string) => [
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { signOut, user } = useAuth();
-  const { isStaff, effectiveOwnerId } = useStaffAccess();
+  const { isStaff, effectiveOwnerId, loading: staffLoading } = useStaffAccess();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
-  const [currentPlan, setCurrentPlan] = useState<string>("Free");
+  const targetId = effectiveOwnerId || user?.id;
+  const { data: currentPlan, isError: isPlanError } = useQuery({
+    queryKey: ["subscription-plan", "badge", targetId],
+    enabled: !staffLoading && Boolean(targetId),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("subscription_plans(name)")
+        .eq("user_id", targetId!)
+        .eq("status", "active")
+        .maybeSingle();
+      if (error) throw error;
+      const planName = (data as SubscriptionPlanJoin | null)?.subscription_plans?.name;
+      return planName || "Free";
+    },
+  });
 
   const sidebarLinks = getSidebarLinks(t).filter((link) => !(isStaff && link.name === "Staff"));
   const currentPath = location.pathname;
@@ -56,24 +75,6 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
     { name: t("sidebar.tenants"), href: "/dashboard/tenants", icon: Users },
     { name: t("sidebar.payments"), href: "/dashboard/payments", icon: CreditCard },
   ];
-
-  useEffect(() => {
-    const targetId = effectiveOwnerId || user?.id;
-    if (!targetId) return;
-    const fetchPlan = async () => {
-      const { data } = await supabase
-        .from("subscriptions")
-        .select("subscription_plans(name)")
-        .eq("user_id", targetId)
-        .eq("status", "active")
-        .maybeSingle();
-      const planName = (data as SubscriptionPlanJoin | null)?.subscription_plans?.name;
-      if (planName) {
-        setCurrentPlan(planName);
-      }
-    };
-    fetchPlan();
-  }, [user, effectiveOwnerId]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -117,18 +118,22 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
               <Crown className="w-4 h-4" />
               {t("sidebar.subscription")}
             </span>
-            <Badge
-              variant="secondary"
-              className={`text-[10px] px-1.5 py-0 ${
-                currentPlan === "Free"
-                  ? "bg-muted text-muted-foreground"
-                  : currentPlan === "Pro"
-                  ? "bg-primary/10 text-primary"
-                  : "bg-warning/10 text-warning"
-              }`}
-            >
-              {currentPlan}
-            </Badge>
+            {isPlanError ? null : currentPlan ? (
+              <Badge
+                variant="secondary"
+                className={`text-[10px] px-1.5 py-0 ${
+                  currentPlan === "Free"
+                    ? "bg-muted text-muted-foreground"
+                    : currentPlan === "Pro"
+                    ? "bg-primary/10 text-primary"
+                    : "bg-warning/10 text-warning"
+                }`}
+              >
+                {currentPlan}
+              </Badge>
+            ) : (
+              <Skeleton className="h-4 w-10 rounded" aria-hidden="true" />
+            )}
           </Link>
         )}
         <Link
@@ -233,7 +238,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-64 pt-[calc(3.5rem+env(safe-area-inset-top,0px))] lg:pt-0 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
+      <main className="flex-1 min-w-0 lg:ml-64 pt-[calc(3.5rem+env(safe-area-inset-top,0px))] lg:pt-0 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
         <div className="p-4 sm:p-6 lg:p-8 page-enter">
           {children}
         </div>

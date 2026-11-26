@@ -18,6 +18,7 @@ import OverLimitBanner from "@/components/OverLimitBanner";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { useSubscriptionPlan } from "@/hooks/useSubscriptionPlan";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Announcement {
   id: string;
@@ -142,7 +143,7 @@ const Announcements = () => {
         {isOverLimit && (
           <OverLimitBanner bedCount={bedCount} bedLimit={bedLimit} planName={limits.name} />
         )}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">Announcements</h1>
             <p className="text-muted-foreground">Post rules, updates, and notices for your tenants</p>
@@ -190,7 +191,7 @@ const Announcements = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : announcements.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -204,15 +205,15 @@ const Announcements = () => {
             {announcements.map(a => (
               <Card key={a.id} className={!a.is_active ? "opacity-60" : ""}>
                 <CardContent className="py-4 space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
                       {priorityIcon(a.priority)}
-                      <div>
-                        <h3 className="font-semibold">{a.title}</h3>
-                        <p className="text-xs text-muted-foreground">{a.properties?.name} · {new Date(a.created_at).toLocaleDateString()}</p>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold break-words">{a.title}</h3>
+                        <p className="text-xs text-muted-foreground break-words">{a.properties?.name} · {new Date(a.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <Badge
                         variant={a.is_active ? "default" : "secondary"}
                         className={`cursor-pointer text-xs ${a.is_active ? "bg-success" : ""}`}
@@ -220,7 +221,7 @@ const Announcements = () => {
                       >
                         {a.is_active ? "Active" : "Hidden"}
                       </Badge>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(a.id)}>
+                      <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7 text-destructive" onClick={() => handleDelete(a.id)}>
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
