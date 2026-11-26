@@ -17,6 +17,7 @@ import RentReceipt from "@/components/RentReceipt";
 import { formatReceiptWhatsAppFeedback, useWhatsAppNotify } from "@/hooks/useWhatsAppNotify";
 import { buildReceipt } from "@/lib/receipt";
 import { StorageFileLink } from "@/components/StorageFileLink";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface Payment {
   id: string;
@@ -363,7 +364,7 @@ const TenantPayments = () => {
         )}
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="list" count={5} />
         ) : payments.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

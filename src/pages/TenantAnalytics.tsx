@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from "recharts";
 import { motion } from "framer-motion";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface PropertyOccupancy {
   name: string;
@@ -317,7 +318,7 @@ const TenantAnalytics = () => {
         </Card>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading analytics...</p>
+          <DelayedPageSkeleton variant="cards" count={4} />
         ) : (
           <>
             {/* Summary Cards */}

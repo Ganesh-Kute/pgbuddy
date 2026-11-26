@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 interface PaymentInfoData {
   id?: string;
@@ -134,7 +135,7 @@ const PaymentSettings = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="detail" count={6} />
         ) : (
           <>
             {/* Property selector */}

@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import InstallPWA from "@/components/InstallPWA";
+import { DelayedPageSkeleton } from "@/components/ui/DelayedPageSkeleton";
 
 const ProfileSettings = ({ Layout }: { Layout: React.ComponentType<{ children: React.ReactNode }> }) => {
   const { user } = useAuth();
@@ -70,7 +71,7 @@ const ProfileSettings = ({ Layout }: { Layout: React.ComponentType<{ children: R
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <DelayedPageSkeleton variant="detail" count={5} />
         ) : (
           <>
             <Card>
