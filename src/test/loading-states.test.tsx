@@ -269,3 +269,26 @@ describe("sign-in requests on a network that never answers", () => {
     expect(network.isOffline()).toBe(false);
   });
 });
+
+describe("Log in with a number that has no account (server says: sign up first)", () => {
+  it("switches to Sign up with the number kept, instead of an error dead end", async () => {
+    const { supabase } = await import("@/integrations/supabase/client");
+    (supabase.auth.signInWithOtp as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: null,
+      error: new Error("No account found for this number. Please sign up first."),
+    });
+    const { default: Auth } = await import("@/pages/Auth");
+    await show(<Auth />);
+    const tel = container.querySelector<HTMLInputElement>('input[type="tel"]')!;
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setValue.call(tel, "9999902170");
+      tel.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      tel.form!.requestSubmit();
+    });
+    expect(text()).toMatch(/Your Full Name/i);
+    expect(container.querySelector<HTMLInputElement>('input[type="tel"]')?.value).toMatch(/9999902170/);
+  });
+});
