@@ -50,8 +50,7 @@ describe("first-load weight of the pages people open first", () => {
     expect(packagesOnFirstLoad("pages/Dashboard.tsx").has("recharts")).toBe(false);
   });
 
-  // Auth.tsx joins this list once T1 releases it (it still uses framer-motion today).
-  it.each(["pages/TenantDashboard.tsx", "pages/Dashboard.tsx"])(
+  it.each(["pages/Auth.tsx", "pages/TenantDashboard.tsx", "pages/Dashboard.tsx"])(
     "%s does not pull the full framer-motion bundle onto its first load",
     (page) => {
       expect(packagesOnFirstLoad(page).has("framer-motion")).toBe(false);

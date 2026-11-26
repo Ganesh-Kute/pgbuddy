@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import { Building2, Lock, User, ArrowLeft, Phone, BadgeCheck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { getAppName, getAppLogo, isWhiteLabel } from "@/lib/branding";
 import { ACCOUNT_REMOVED_FLAG, homeFor } from "@/lib/auth-roles";
 import { AuthWaitScreen } from "@/components/ui/AppLoadingSkeleton";
+
+/** 1x1 transparent gif: what a phone "loads" for the md+ decorative photos. */
+const NO_IMAGE = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
 import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 
 const Auth = () => {
@@ -114,12 +116,7 @@ const Auth = () => {
 
 
 
-        <motion.main 
-          initial={{ opacity: 0, scale: 0.98, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="relative w-full max-w-[1000px] mx-auto z-10"
-        >
+        <main className="relative w-full max-w-[1000px] mx-auto z-10 animate-in fade-in zoom-in-[0.98] slide-in-from-bottom-2 duration-500 ease-out fill-mode-both">
           <div className="bg-white/80 backdrop-blur-3xl rounded-3xl shadow-[0_20px_50px_-12px_rgba(30,41,59,0.08)] overflow-hidden flex flex-col md:flex-row border border-white/80">
             
             {/* Left Side: Brand & Visuals */}
@@ -151,11 +148,17 @@ const Auth = () => {
               {/* Premium Architecture Image */}
               <div className="mt-14 relative group hidden md:block">
                 <div className="absolute inset-0 bg-primary/10 rounded-2xl translate-x-3 translate-y-3 -z-10 transition-transform group-hover:translate-x-2 group-hover:translate-y-2"></div>
-                <img 
-                  alt="Premium coliving space" 
-                  className="w-full h-56 object-cover rounded-2xl shadow-md grayscale-[0.2]" 
-                  src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&q=80"
-                />
+                {/* Phones never download it: the <source> only matches md+, the fallback is a 1x1 inline gif. */}
+                <picture>
+                  <source media="(min-width: 768px)" srcSet="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=70" />
+                  <img
+                    alt="Premium coliving space"
+                    className="w-full h-56 object-cover rounded-2xl shadow-md grayscale-[0.2]"
+                    src={NO_IMAGE}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </picture>
               </div>
             </div>
 
@@ -246,8 +249,7 @@ const Auth = () => {
                   </>
                 ) : (
                   /* OTP Code */
-                  <AnimatePresence>
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="group">
+                  <div className="group animate-in fade-in slide-in-from-top-1 duration-300">
                       <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.2em] mb-4 ml-1 transition-colors group-focus-within:text-primary">Verification Code</label>
                       <p className="text-xs text-primary font-bold mb-4 ml-1">Code sent to +91 {phone}</p>
                       <div className="relative border-b-2 border-slate-100 group-focus-within:border-primary transition-all pb-2">
@@ -263,8 +265,7 @@ const Auth = () => {
                         />
                       </div>
                       <button type="button" onClick={() => setShowOtp(false)} className="text-[11px] font-bold text-slate-400 hover:text-primary mt-4 uppercase tracking-widest transition-colors">Change Number</button>
-                    </motion.div>
-                  </AnimatePresence>
+                  </div>
                 )}
 
                 {/* Terms */}
@@ -300,7 +301,7 @@ const Auth = () => {
             </div>
             
           </div>
-        </motion.main>
+        </main>
       </div>
     );
   }
@@ -313,11 +314,11 @@ const Auth = () => {
       {/* Left Side: Visual Narrative */}
       <section className="hidden md:flex md:w-1/2 lg:w-[55%] relative items-end p-12 overflow-hidden bg-zinc-950">
         <div className="absolute inset-0 z-0">
-          <img 
-            className="w-full h-full object-cover opacity-80" 
-            src="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80" 
-            alt="Interior" 
-          />
+          {/* Phones never download it: the <source> only matches md+, the fallback is a 1x1 inline gif. */}
+          <picture>
+            <source media="(min-width: 768px)" srcSet="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1400&q=70" />
+            <img className="w-full h-full object-cover opacity-80" src={NO_IMAGE} alt="Interior" decoding="async" />
+          </picture>
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
         </div>
         
@@ -343,12 +344,7 @@ const Auth = () => {
           <ArrowLeft className="w-4 h-4" /> Back to Home
         </Link>
 
-        <motion.div 
-           initial={{ opacity: 0, y: 20 }}
-           animate={{ opacity: 1, y: 0 }}
-           transition={{ duration: 0.4 }}
-           className="w-full max-w-[420px] pt-16 md:pt-0"
-        >
+        <div className="w-full max-w-[420px] pt-16 md:pt-0 animate-in fade-in slide-in-from-bottom-5 duration-500 fill-mode-both">
           {/* Mobile Brand Logo */}
           <div className="md:hidden flex flex-col justify-center items-center gap-3 px-2 pb-8 mb-10 w-full border-b border-border/50">
             {isWhiteLabel ? (
@@ -394,8 +390,7 @@ const Auth = () => {
                 </div>
               </div>
             ) : (
-              <AnimatePresence>
-                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
+              <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
                   <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl text-sm text-center font-medium text-primary">
                     Code sent to <b className="tracking-wide">+91 {phone}</b> via WhatsApp
                   </div>
@@ -418,8 +413,7 @@ const Auth = () => {
                     </div>
                   </div>
                   <button type="button" onClick={() => setShowOtp(false)} className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors block w-full text-center hover:underline">Change Mobile Number?</button>
-                </motion.div>
-              </AnimatePresence>
+                </div>
             )}
 
             <Button
@@ -456,7 +450,7 @@ const Auth = () => {
             <a href="#" className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Terms</a>
             <a href="#" className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Support</a>
           </footer>
-        </motion.div>
+        </div>
       </section>
     </main>
   );
